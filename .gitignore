@@ -1,0 +1,28 @@
+# --- segredos: NUNCA versionar ---
+.env
+.env.*
+*.pem
+
+# --- dependências e lixo do sistema ---
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
+
+# --- material do evento que não é nosso (dados e kits da organização): fica só na máquina ---
+# A base de dados do desafio e o brandbook/deck do workshop são da organização; o README explica onde colocá-los.
+base-de-dados/
+marketing/
+
+# --- configuração local de ferramentas de IA e skills de terceiros instaladas ---
+.claude/
+.agents/
+.frontend-slides/
+skills-lock.json
+
+# --- gerados a partir da base do evento (prints da tela e deck com os dados embutidos): o repositório guarda o CÓDIGO que os gera ---
+pitch/pitch.html
+pitch/assets/
+
+# --- saídas geradas (rodadas do agente, página, baseline): derivam da base do evento e são regeneráveis ---
+conferente/saida/

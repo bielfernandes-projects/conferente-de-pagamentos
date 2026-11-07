@@ -1,0 +1,48 @@
+{
+ "titulo_id": "TP431634",
+ "origem": "baseline/agente_semana.json",
+ "calls": [
+  {
+   "ferramenta": "consultar_titulo",
+   "args": {
+    "titulo_id": "TP431634"
+   }
+  },
+  {
+   "ferramenta": "consultar_nf",
+   "args": {
+    "titulo_id": "TP431634"
+   }
+  },
+  {
+   "ferramenta": "buscar_titulos_mesma_nf",
+   "args": {
+    "titulo_id": "TP431634"
+   }
+  },
+  {
+   "ferramenta": "corrigir_lancamento",
+   "args": {
+    "campo": "valor",
+    "evidencias": "NF 35957 (portal NF-e, emitente POLIFILM FILMES TECNICOS LTDA), duplicata 001/002: R$ 2.406,36 venc. 2026-11-04. OC-40685 aprovada: total R$ 4.812,72 = 2 x R$ 2.406,36 (bate). Parcela 2/2 já lançada corretamente como TP431635 (R$ 2.406,36, aberto). Título TP431634 lançado com R$ 240,64 = erro de digitação por fator 10 na duplicata 001. Diferença a corrigir: R$ 2.165,72 (abaixo da alçada de R$ 5.000).",
+    "justificativa": "Erro de digitação (fator 10) no valor da duplicata 001 da NF 35957; valor correto é R$ 2.406,36 conforme duplicata no portal NF-e e OC aprovada.",
+    "titulo_id": "TP431634",
+    "valor_novo": 2406.36
+   }
+  },
+  {
+   "ferramenta": "agendar_titulo",
+   "args": {
+    "lote_remessa": "RM20261104-MER",
+    "titulo_id": "TP431634"
+   }
+  },
+  {
+   "ferramenta": "concluir_caso",
+   "args": {
+    "resultado": "resolvido",
+    "resumo": "Suspeita confirmada: TP431634 (Polifilm, NF 35957, parcela 1/2) estava com R$ 240,64 em vez de R$ 2.406,36 — erro de digitação por fator 10 na duplicata 001 (OC-40685 aprovada: total R$ 4.812,72 = 2 × R$ 2.406,36; parcela 2/2 TP431635 já estava correta). Corrigido para R$ 2.406,36 (dentro da alçada, diferença de R$ 2.165,72) e mantido/reagendado no lote RM20261104-MER. Sem duplicidade. Lote fecha no horário normal."
+   }
+  }
+ ]
+}
