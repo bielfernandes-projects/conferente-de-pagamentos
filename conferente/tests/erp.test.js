@@ -3,6 +3,9 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const { novoAmbiente } = require("../erp");
+
+// Estes testes usam títulos reais do desafio: precisam da base em base-de-dados/ (ver README). Sem ela, são pulados, não falham.
+if (!require("fs").existsSync(require("path").join(__dirname, "..", "..", "base-de-dados", "GoHacks_Talent_2026_bases_csv", "pagamentos", "fornecedores.csv"))) { test("(pulado) precisa da base do desafio em base-de-dados/", { skip: true }, () => {}); return; }
 const ev = "teste";
 
 test("cancelar título legítimo (sem gêmeo mais antigo) é negado", () => {

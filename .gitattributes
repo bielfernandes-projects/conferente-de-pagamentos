@@ -1,0 +1,4 @@
+# Quebra de linha sempre LF (os testes e os HTML gerados dependem disso; no Windows o Git converteria para CRLF)
+* text=auto eol=lf
+*.png binary
+*.woff2 binary

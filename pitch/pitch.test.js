@@ -9,6 +9,9 @@ const saida = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, "..", "conf
 // o que aparece no slide, sem as notas de fala (elas repetem números e dizem o que NÃO afirmamos)
 const visivel = html ? html.replace(/<aside class="notes">[\s\S]*?<\/aside>/g, "") : "";
 const secoes = html ? [...html.matchAll(/<section class="slide[^"]*"([^>]*)>([\s\S]*?)<\/section>/g)] : [];
+const raiz = path.join(__dirname, "..");
+const temSaidas = fs.existsSync(path.join(raiz, "conferente", "saida", "placar.json"));   // saídas geradas: não vão para o repositório
+const temBase = fs.existsSync(path.join(raiz, "base-de-dados", "GoHacks_Talent_2026_bases_csv", "pagamentos", "fornecedores.csv"));
 const principais = secoes.filter((s) => !/data-ap=/.test(s[1]));
 
 test("segue a estrutura de 5 minutos do workshop, na ordem", { skip: !html }, () => {
@@ -30,13 +33,13 @@ test("todo slide tem nota de fala; o da demo diz como abrir a página e cita o p
   assert.match(demo, /PLANO B/);
 });
 
-test("números do slide vêm dos dados, não de texto digitado", { skip: !html }, () => {
+test("números do slide vêm dos dados, não de texto digitado", { skip: !html || !temSaidas }, () => {
   const dup = saida("duplicidades_ja_pagas.json"), placar = saida("placar.json");
   const mil = (v) => "R$ " + Math.round(v / 1000).toLocaleString("pt-BR") + " mil";
   for (const n of [mil(dup.total), mil(dup.confirmadoNoExtrato.soma), mil(placar.em_risco), mil(placar.cancelado)]) assert.ok(visivel.includes(n), n);
 });
 
-test("o número de testes no slide é o de testes que passam", { skip: !html }, () => {
+test("o número de testes no slide é o de testes que passam", { skip: !html || !temBase }, () => {
   const { spawnSync } = require("child_process");
   const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;   // senão o node --test filho muda o formato da saída
   const r = spawnSync(process.execPath, ["--test", "tests/"], { cwd: path.join(__dirname, "..", "conferente"), encoding: "utf8", env });
