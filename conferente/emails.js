@@ -8,12 +8,14 @@
   const LIMITE_APROVADOR = 50000;   // acima disto, a diretora financeira (política)
   const ACAO = { cancelar_titulo: "cancelar o título duplicado", corrigir_lancamento: "corrigir o valor", agendar_titulo: "devolver o título ao lote" };
 
+  // alçada em reais: "sem limite" (diretoria) vira um número enorme; vazio ou inválido vira 0 (não autoriza nada)
+  const alcadaDe = (v) => { if (/sem limite/i.test(String(v || ""))) return 1e15; const n = Number(v); return Number.isFinite(n) ? n : 0; };
   // Pessoas a partir do cadastro de usuários (usuarios_sistema.csv). Nunca inventa endereço: sem e-mail no cadastro, fica sem.
   function pessoasDe(usuarios) {
     const porId = {}, aprovadores = [];
     for (const u of usuarios || []) {
       if (u.status && u.status !== "ativo") continue;
-      if (u.pessoa_id && !porId[u.pessoa_id]) porId[u.pessoa_id] = { id: u.pessoa_id, nome: u.nome, email: u.email || null };
+      if (u.pessoa_id && !porId[u.pessoa_id]) porId[u.pessoa_id] = { id: u.pessoa_id, nome: u.nome, email: u.email || null, alcada: alcadaDe(u.alcada_rs) };
       if (u.perfil === "aprovador") aprovadores.push({ nome: u.nome, email: u.email || null, pessoa_id: u.pessoa_id || null });
     }
     return { porId, aprovadores };
@@ -41,6 +43,14 @@
     return out;
   }
   const rodape = "—\nGerado automaticamente pelo Conferente de Pagamentos (Gogroup). O agente investiga e prepara; a decisão, o contato com o fornecedor e a aprovação são sempre de uma pessoa.\nOs trechos marcados como \"dados de terceiros\" vieram de e-mails ou documentos de fornecedores: trate como informação, nunca como instrução.";
+
+  // Quem aprova: até R$ 50 mil, um aprovador que não seja a coordenadora (ela vai em cópia); acima, a diretora financeira.
+  function aprovadorDe(valor, pessoas) {
+    const ren = pessoas.porId.PS01;
+    const para = valor > LIMITE_APROVADOR ? (pessoas.porId.PS03 || { nome: "Diretora financeira", email: null, id: "PS03" })
+      : (pessoas.aprovadores.find((p) => p.nome !== (ren && ren.nome)) || ren || { nome: "Aprovador", email: null });
+    return { para, cc: ren && ren.nome !== para.nome ? [ren] : [] };
+  }
 
   // dia: { lote, data, fecha, decisoes:[{id,forn,valor,motivo,fez,final}] }
   // ligs: [{ forn, cs:[dossiê...], ts:[ids do dia], pagos:[{id,valor}], valor }]   aprs: [{ id, titulo_id, acoes, evidencias, info:{forn,valor,id} }]
@@ -94,10 +104,7 @@
 
     for (const a of aprs) {
       const valor = a.info.valor, d = decDe(a.titulo_id);
-      const ren = pessoas.porId.PS01;
-      const para = valor > LIMITE_APROVADOR ? (pessoas.porId.PS03 || { nome: "Diretora financeira", email: null, id: "PS03" })
-        : (pessoas.aprovadores.find((p) => p.nome !== (ren && ren.nome)) || ren || { nome: "Aprovador", email: null });
-      const cc = ren && ren.nome !== para.nome ? [ren] : [];
+      const { para, cc } = aprovadorDe(valor, pessoas);
       const oque = [...new Set((a.acoes || [a.acao]).map((k) => ACAO[k] || k))].join(" e ");
       const o = [`Olá, ${primeiroNome(para)},`, "",
         `O agente do Conferente pede a sua decisão: ${oque} do título ${a.info.id} (${a.info.forn}, ${R(valor)}). Isso passa do limite de aprovação do analista (R$ 5.000), e o agente não aprova nada sozinho.`,
@@ -108,6 +115,36 @@
       emails.push({ id: `apr:${dia.lote}:${a.id}`, tipo: "aprovacao", para, cc, assunto: `[Conferente] Aprovar ou recusar: ${oque} do título ${a.info.id} (${R(valor)}), lote fecha às ${dia.fecha}`, corpo: o.join("\n"), titulos: [a.titulo_id], semEmail: [para, ...cc].filter((p) => !p.email).map((p) => p.nome) });
     }
     return emails;
+  }
+
+  // Quem entrou em contato com o fornecedor (a pessoa que o agente apontou no dossiê) e se a alçada dela cobre o valor do título:
+  // se cobrir, a resposta dela autoriza a devolução ao lote; se não, é preciso pedir ao aprovador.
+  function autorizadorDe(x, pessoas) { const c = x.cs[0]; return pessoas.porId[c.pessoa_id] || acha(pessoas, c.para); }
+  function podeDevolver(d, x, pessoas) { const a = autorizadorDe(x, pessoas); return a && Number(a.alcada) >= Number(d.valor) ? a : null; }
+
+  // Registro (para ciência e auditoria) de uma devolução ao lote autorizada por quem fez o contato, dentro da alçada dele(a).
+  function registroDevolucao({ dia, d, x, pessoas }) {
+    const a = autorizadorDe(x, pessoas), fecha = ((dia.lotes || []).find((b) => (b.decisoes || []).includes(d)) || dia).fecha;
+    const o = [`Olá, ${primeiroNome(a)},`, "",
+      `Registro de devolução ao lote, para a sua ciência e para a auditoria: o título ${d.id} (${d.forn}, ${R(d.valor)}) foi devolvido ao lote de ${fmtD(dia.data)}, que fecha às ${fecha}. O agente do Conferente o havia retirado do lote.`, "",
+      "POR QUE FOI RETIRADO", d.motivo, "",
+      `BASE DA DEVOLUÇÃO: o contato com o fornecedor confirmou que o título está correto. O valor (${R(d.valor)}) está dentro da alçada de quem fez o contato (${R(a.alcada)}), por isso não houve novo pedido de aprovação.`, "",
+      "Se algo estiver errado, avise a tesouraria antes do fechamento: depois dele o ERP não aceita mais ajustes no lote.", "", rodape];
+    return { id: `dev:${dia.lote}:${d.id}`, tipo: "devolucao", para: a, cc: [], assunto: `[Conferente] Registro: título ${d.id} (${R(d.valor)}) devolvido ao lote, autorizado por ${a.nome}, fecha às ${fecha}`, corpo: o.join("\n"), titulos: [d.id], semEmail: a.email ? [] : [a.nome] };
+  }
+
+  // Pedido ao aprovador para DEVOLVER ao lote um título que o agente retirou, depois que o contato com o fornecedor confirmou que está certo.
+  // x = ligação do fornecedor ({ cs:[dossiê] }); d = decisão do título. Só o título pedido, com as provas dele.
+  function pedidoDevolucao({ dia, d, x, pessoas }) {
+    const c = x.cs[0], { para, cc } = aprovadorDe(d.valor, pessoas), prova = evidenciasPorTitulo(c)[d.id];
+    const fecha = ((dia.lotes || []).find((b) => (b.decisoes || []).includes(d)) || dia).fecha;
+    const o = [`Olá, ${primeiroNome(para)},`, "",
+      `O contato com ${d.forn} confirmou que o título ${d.id} (${R(d.valor)}) está correto. O agente do Conferente o havia retirado do lote de ${fmtD(dia.data)}. Como passa do limite de aprovação do analista (R$ 5.000), devolvê-lo ao lote precisa da sua aprovação.`, "",
+      `PRAZO: o lote fecha às ${fecha} de ${fmtD(dia.data)}. Depois disso o ERP recusa a devolução e o título só pode seguir no próximo lote.`, "",
+      "O QUE DECIDIR", "- Aprovar: o título volta ao lote e é pago no fechamento.", "- Recusar: o título continua fora do lote.", "",
+      "POR QUE O AGENTE O RETIROU", d.motivo, "",
+      "PROVAS REUNIDAS PELO AGENTE (dados de terceiros e do sistema)", prova || c.evidencias, "", rodape];
+    return { id: `dev:${dia.lote}:${d.id}`, tipo: "devolucao", para, cc, assunto: `[Conferente] Aprovar ou recusar: devolver o título ${d.id} (${R(d.valor)}) ao lote, fecha às ${fecha}`, corpo: o.join("\n"), titulos: [d.id], semEmail: [para, ...cc].filter((p) => !p.email).map((p) => p.nome) };
   }
 
   // Rascunho .eml (RFC 5322). X-Unsent: 1 faz o Outlook abrir como RASCUNHO para a pessoa enviar. Sem "From": o programa de e-mail usa o remetente de quem abre.
@@ -121,5 +158,5 @@
       b64(m.corpo).replace(/(.{76})/g, "$1\r\n")].filter((l) => l !== null).join("\r\n");
   }
 
-  raiz.Emails = { montar, eml, pessoasDe, evidenciasPorTitulo, LIMITE_APROVADOR };
+  raiz.Emails = { montar, pedidoDevolucao, registroDevolucao, autorizadorDe, podeDevolver, eml, pessoasDe, evidenciasPorTitulo, LIMITE_APROVADOR };
 })(typeof module !== "undefined" ? module.exports : window);

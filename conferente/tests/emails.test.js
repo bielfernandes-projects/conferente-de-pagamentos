@@ -166,3 +166,55 @@ test('o e-mail pede para a pessoa "entrar em contato" (e não "ligar"): assunto,
   assert.doesNotMatch(m.assunto + m.corpo, /Ligar para|Ligue para|Nunca ligue|Perguntas para a ligação|a ligação e a aprovação/);
   assert.match(m.corpo, /telefone DO CADASTRO[^]*Nunca use número ou endereço informado em e-mail/);   // a trava de segurança continua dita
 });
+
+test("pedido de devolução ao lote: vai ao aprovador do limite (diretora acima de R$ 50 mil), com a coordenadora em cópia, só do título pedido", () => {
+  const d = { id: "TP1", forn: "Embalarte", valor: 8242.56, motivo: "dados bancários alterados em 30/10 sem confirmação" };
+  const dia2 = { ...dia, decisoes: [d], lotes: [{ fecha: "10:00", decisoes: [d] }] };
+  const x = { ...lig, cs: [{ ...dossie, titulos: ["TP1", "TP9"], evidencias: "prova do TP1 só dele\n+ TP9: prova do OUTRO título" }] };
+  const m = Emails.pedidoDevolucao({ dia: dia2, d, x, pessoas });
+  assert.strictEqual(m.tipo, "devolucao");
+  assert.strictEqual(m.para.email, "claudia.ferraz@exemplo.test");                 // até R$ 50 mil: aprovador que não é a coordenadora
+  assert.deepStrictEqual(m.cc.map((p) => p.email), ["renata.paiva@exemplo.test"]);
+  assert.match(m.assunto, /Aprovar ou recusar: devolver o título TP1 \(R\$ 8\.242,56\) ao lote, fecha às 10:00/);
+  assert.match(m.corpo, /Aprovar: o título volta ao lote/);
+  assert.match(m.corpo, /Recusar: o título continua fora do lote/);
+  assert.match(m.corpo, /o ERP recusa a devolução/);
+  assert.match(m.corpo, /prova do TP1 só dele/);
+  assert.doesNotMatch(m.corpo, /OUTRO título/);
+  const grande = Emails.pedidoDevolucao({ dia: dia2, d: { ...d, valor: 80000 }, x, pessoas });
+  assert.strictEqual(grande.para.email, "helena.duarte@exemplo.test");
+});
+
+test("pedido de devolução: aprovação de e-mail do aprovador continua igual (mesma regra de destino)", () => {
+  const [m] = Emails.montar({ dia, ligs: [], aprs: [pedido(9121.78)], pessoas });
+  assert.strictEqual(m.para.email, "claudia.ferraz@exemplo.test");
+  assert.deepStrictEqual(m.cc.map((p) => p.email), ["renata.paiva@exemplo.test"]);
+  const [g] = Emails.montar({ dia, ligs: [], aprs: [pedido(80000)], pessoas });
+  assert.strictEqual(g.para.email, "helena.duarte@exemplo.test");
+});
+
+test("alçada de cada pessoa vem do cadastro (sem limite = diretoria; vazio = 0, não autoriza nada)", () => {
+  const p = Emails.pessoasDe([
+    { nome: "Renata Paiva", email: "r@x.test", perfil: "aprovador", pessoa_id: "PS01", status: "ativo", alcada_rs: "50000.00" },
+    { nome: "Helena Duarte", email: "h@x.test", perfil: "diretoria", pessoa_id: "PS03", status: "ativo", alcada_rs: "sem limite" },
+    { nome: "Lívia Campos", email: "l@x.test", perfil: "consulta", pessoa_id: "PS08", status: "ativo", alcada_rs: "" }]);
+  assert.strictEqual(p.porId.PS01.alcada, 50000);
+  assert.ok(p.porId.PS03.alcada > 1e12);
+  assert.strictEqual(p.porId.PS08.alcada, 0);
+});
+
+test("devolver ao lote: dentro da alçada de quem fez o contato autoriza; acima (ou sem alçada) não; e o registro cita quem autorizou", () => {
+  const ps = Emails.pessoasDe([{ nome: "Renata Paiva", email: "renata.paiva@exemplo.test", perfil: "aprovador", pessoa_id: "PS01", status: "ativo", alcada_rs: "50000.00" }]);
+  const d = { id: "TP1", forn: "Embalarte", valor: 8242.56, motivo: "dados bancários alterados" };
+  const dia2 = { ...dia, decisoes: [d], lotes: [{ fecha: "10:00", decisoes: [d] }] };
+  assert.strictEqual(Emails.podeDevolver(d, lig, ps).nome, "Renata Paiva");
+  assert.strictEqual(Emails.podeDevolver({ ...d, valor: 50000.01 }, lig, ps), null);        // um centavo acima da alçada
+  assert.strictEqual(Emails.podeDevolver({ ...d, valor: 50000 }, lig, ps).nome, "Renata Paiva");   // exatamente na alçada
+  assert.strictEqual(Emails.podeDevolver(d, { ...lig, cs: [{ ...dossie, pessoa_id: "PS99", para: "Alguém Sem Cadastro (cargo)" }] }, ps), null);   // quem não está no cadastro não autoriza
+  const m = Emails.registroDevolucao({ dia: dia2, d, x: lig, pessoas: ps });
+  assert.strictEqual(m.tipo, "devolucao");
+  assert.strictEqual(m.para.email, "renata.paiva@exemplo.test");
+  assert.match(m.assunto, /Registro: título TP1 \(R\$ 8\.242,56\) devolvido ao lote, autorizado por Renata Paiva, fecha às 10:00/);
+  assert.match(m.corpo, /dentro da alçada de quem fez o contato \(R\$ 50\.000,00\)/);
+  assert.match(m.corpo, /não houve novo pedido de aprovação/);
+});

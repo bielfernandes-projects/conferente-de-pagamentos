@@ -51,7 +51,7 @@ h2.sec{font-weight:800;font-size:22px;color:var(--az);margin:38px 0 4px}
 .num{width:42px;height:42px;border-radius:50%;background:var(--az);color:#fff;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center}
 .passo.feito .num{background:var(--ci);color:var(--esc)}
 /* passo lido: só o conteúdo esmaece; a caixa "Marcado como lido" e o botão de envio ficam com força total (o botão acabou de ser liberado) */
-.passo.feito > div:last-child > :not(label.ok):not(.envio){opacity:.62}
+.passo.feito > div:last-child > :not(label.ok):not(.envio):not(.card){opacity:.62}
 .passo h3{font-weight:700;font-size:18px;line-height:1.3}
 .chip{display:inline-block;font-weight:600;font-size:11.5px;padding:3px 10px;border-radius:999px;margin:0 4px 4px 0}
 .c-ci{background:var(--ci);color:var(--esc)}.c-am{background:var(--am);color:var(--esc)}.c-vm{background:var(--vm);color:#fff}.c-az{background:var(--az);color:#fff}.c-cz{background:#e9ecf1;color:#445}
@@ -76,6 +76,9 @@ footer{margin:34px 0 40px;font-size:12px;color:var(--mut);max-width:90ch}
 .modal{background:#fff;border-radius:28px;max-width:880px;width:100%;padding:28px;margin:auto}
 .email{background:var(--bg);border-radius:18px;padding:12px 16px;margin:8px 0;font-size:13.5px}
 .envio{margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd)}
+.devolver{margin-top:12px;padding:12px 16px;border-radius:18px;background:#fff;border:1px dashed var(--bd)}
+.dv .acoes{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.dv .resp{display:flex;align-items:center;gap:6px;flex-wrap:wrap;color:var(--mut)}
+.dv{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:7px 0;border-top:1px solid var(--bd);font-size:14px}
 /* celular: nada pode empurrar a largura da página */
 .hero>*,.passo>*,.stats>*{min-width:0}
 .card,.bloco,.stat,.pre,.kv,.caixa,.linha>*{overflow-wrap:anywhere}
@@ -113,7 +116,7 @@ const diaSemana = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("pt-BR
 let atual = DIAS[0].lote;
 { const h = decodeURIComponent(location.hash.slice(1)); const alvo = DIAS.find((d) => d.lote === h || d.lotes.some((l) => l.lote === h)); if (alvo) atual = alvo.lote; else if (h === "__hist") atual = h; }
 // Reinício de um dia: apaga as leituras ("Marcado como lido") e os e-mails "enviados" (simulado) guardados neste navegador. Serve para ensaiar e para abrir limpo na apresentação.
-const reiniciarDia = (lote) => { try { ["ligar", "aprovar", "assinar"].forEach((k) => localStorage.removeItem("ok:" + lote + ":" + k)); ["", ":ligacao", ":aprovacao"].forEach((s) => localStorage.removeItem("caixa:" + lote + s)); } catch (e) {} };
+const reiniciarDia = (lote) => { try { const dia = DIAS.find((x) => x.lote === lote); if (dia) dia.decisoes.forEach((d) => localStorage.removeItem("dev:" + lote + ":" + d.id)); ["ligar", "aprovar", "assinar"].forEach((k) => localStorage.removeItem("ok:" + lote + ":" + k)); ["", ":ligacao", ":aprovacao"].forEach((s) => localStorage.removeItem("caixa:" + lote + s)); } catch (e) {} };
 // Endereço com #reiniciar: reinicia o dia mais recente ("Hoje") e tira o comando do endereço, para um recarregamento não reiniciar de novo.
 if (location.hash === "#reiniciar") { reiniciarDia(DIAS[0].lote); atual = DIAS[0].lote; if (typeof history !== "undefined" && history.replaceState) history.replaceState(null, "", location.pathname + location.search); }
 
@@ -128,24 +131,33 @@ function ligacoesDoLote(l) {
 const pedidosDoLote = (l) => D.aprovacoes.filter((a) => l.decisoes.some((d) => d.id === a.titulo_id || a.casos.includes(d.id)));
 const lista = (txt) => String(txt || "").split(/\s*\|\s*|\n+/).map((s) => s.trim()).filter(Boolean);
 
+// ---------- Devolver ao lote (SIMULADO: nada é gravado no ERP) ----------
+// Se o fornecedor confirmar que o título está certo ANTES do fechamento, ele volta ao lote. Até R$ 5 mil o analista devolve; acima disso é pedido ao aprovador (acima de R$ 50 mil, à diretora).
+const devLer = (lote, id) => { try { const v = JSON.parse(guarda("dev:" + lote + ":" + id) || "null"); return v && typeof v === "object" && (v.tipo === "devolvido" || v.tipo === "pedido" || v.tipo === "reprovado") ? v : null; } catch (e) { return null; } };
+// extra: { email: true } marca o instante do e-mail (aviso ou pedido) enviado; { via: "alcada" | "aprovador", por: nome } diz quem autorizou
+const devGravar = (lote, id, tipo, extra = {}) => { try { const antes = devLer(lote, id) || {}, agora = Date.now(); localStorage.setItem("dev:" + lote + ":" + id, JSON.stringify({ quando: agora, tipo, emailEm: extra.email ? agora : antes.emailEm, via: extra.via || antes.via, por: extra.por || antes.por })); } catch (e) {} };
+const devolvido = (lote, id) => (devLer(lote, id) || {}).tipo === "devolvido";
+
 // Tudo que a tela precisa saber de um dia. Também alimenta o estado (resolvido / pendente) dos botões de dia.
 function analise(l) {
   const ds = l.decisoes, g = (...f) => ds.filter((d) => f.includes(d.final));
-  const lib = g("liberado"), sozinho = g("cancelado", "corrigido", "agente"), retidos = g("escalado", "aprovacao");
+  const retidos0 = g("escalado", "aprovacao"), dev = retidos0.filter((d) => d.final === "escalado" && devolvido(l.lote, d.id));
+  const lib = g("liberado").concat(dev), sozinho = g("cancelado", "corrigido", "agente"), retidos = retidos0.filter((d) => !dev.includes(d));
   const ligs = ligacoesDoLote(l), aprs = pedidosDoLote(l);
   const assin = lib.filter((d) => d.assinatura), porAprov = {};
   assin.forEach((d) => (porAprov[d.assinatura] = porAprov[d.assinatura] || []).push(d));
-  const seguem = ds.filter((d) => !["cancelado", "escalado", "aprovacao"].includes(d.final)).length;   // cancelado, retido e à espera de aprovação saem do lote
+  const seguem = ds.filter((d) => !["cancelado", "escalado", "aprovacao"].includes(d.final)).length + dev.length;   // cancelado, retido e à espera de aprovação saem do lote
+  const foraN = ligs.reduce((s, x) => s + x.ts.filter((t) => !devolvido(l.lote, t)).length, 0);
   const passos = [];
   if (ligs.length) passos.push({ k: "ligar", titulo: ligs.length === 1 ? `Entrar em contato com ${ligs[0].forn}` : `Entrar em contato com ${ligs.length} fornecedores: ${ligs.map((x) => x.forn).join(", ")}`,
-    sub: [ligs.reduce((s, x) => s + x.ts.length, 0) ? `${plural(ligs.reduce((s, x) => s + x.ts.length, 0), "título está", "títulos estão")} fora do lote esperando o contato com o fornecedor.` : "", ligs.some((x) => x.pagos.length) ? `${plural(ligs.reduce((s, x) => s + x.pagos.length, 0), "pagamento já saiu em duplicidade", "pagamentos já saíram em duplicidade")}: o trabalho é recuperar o dinheiro.` : ""].filter(Boolean).join(" ") });
+    sub: [foraN ? `${plural(foraN, "título está", "títulos estão")} fora do lote esperando o contato com o fornecedor.` : "", ligs.some((x) => x.pagos.length) ? `${plural(ligs.reduce((s, x) => s + x.pagos.length, 0), "pagamento já saiu em duplicidade", "pagamentos já saíram em duplicidade")}: o trabalho é recuperar o dinheiro.` : ""].filter(Boolean).join(" ") });
   if (aprs.length) passos.push({ k: "aprovar", titulo: `Decidir ${plural(aprs.length, "pedido do agente", "pedidos do agente")}`, sub: "Cancelamentos e correções acima do limite do analista (R$ 5 mil). O agente não aprova nada sozinho." });
   passos.push({ k: "assinar", titulo: l.lotes.length > 1 ? `Assinar os ${l.lotes.length} lotes (${l.lotes.map((x) => x.banco.replace("Banco ", "") + " " + x.fecha).join(" e ")})` : "Assinar o lote",
     sub: seguem ? `Os ${seguem} títulos que seguem nos lotes foram conferidos.${assin.length ? ` ${assin.length} precisam da assinatura de rotina do aprovador.` : ""}` : "Nenhum título segue neste dia." });
   passos.forEach((p, i) => { p.n = i + 1; p.chave = `ok:${l.lote}:${p.k}`; p.feito = !!guarda(p.chave); });
   const feitos = passos.filter((p) => p.feito).length, pend = passos.filter((p) => !p.feito && p.k !== "assinar").length;
   const estado = feitos === passos.length ? "res" : pend ? "pen" : "ass";   // resolvido · tem pendência · só falta assinar
-  return { ds, lib, sozinho, retidos, ligs, aprs, assin, porAprov, seguem, passos, feitos, pend, estado, prox: passos.find((p) => !p.feito), sem: !ligs.length && !aprs.length };
+  return { ds, lib, sozinho, retidos, dev, ligs, aprs, assin, porAprov, seguem, passos, feitos, pend, estado, prox: passos.find((p) => !p.feito), sem: !ligs.length && !aprs.length };
 }
 
 function navegacao() {
@@ -164,12 +176,13 @@ const traceHtml = (d) => d.trace.length ? `<details><summary>Ver o passo a passo
   return `<div class="step"><b>${esc(FERR[s.f] || s.f)}</b>${res ? ` · ${esc(res)}` : ""}<small>${esc(s.f)} ${esc(JSON.stringify(s.a)).slice(0, 180)}</small></div>`; }).join("")}</details>` : "";
 
 function casoHtml(d) {
-  const chip = { cancelado: ["c-az", "Cancelado"], corrigido: ["c-ci", "Corrigido"], agente: ["c-ci", "Resolvido"], escalado: ["c-vm", "Fora do lote · contato"], aprovacao: ["c-am", "Fora do lote · aprovação"] }[d.final];
+  const dv = devolvido(atual, d.id);
+  const chip = dv ? ["c-ci", "Devolvido ao lote"] : { cancelado: ["c-az", "Cancelado"], corrigido: ["c-ci", "Corrigido"], agente: ["c-ci", "Resolvido"], escalado: ["c-vm", "Fora do lote · contato"], aprovacao: ["c-am", "Fora do lote · aprovação"] }[d.final];
   const nada = ["cancelado", "corrigido", "agente"].includes(d.final);
   return `<div class="linha"><div><div class="id">${esc(d.id)}</div><div>${esc(d.forn)}</div><div class="m">${R(d.valor)}${d.valor_corrigido != null ? ` → ${R(d.valor_corrigido)}` : ""}</div></div>
     <div><span class="chip ${chip[0]}">${chip[1]}</span><div class="m">Por que o sistema suspeitou: ${esc(d.motivo)}</div>
       <ul class="fez">${d.fez.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
-      ${nada ? `<div class="nada">✔ Nada a fazer: o agente resolveu dentro do limite dele.</div>` : `<div class="proximo">Próximo passo → ${esc(d.proximo || "")}</div>`}
+      ${dv ? `<div class="nada">↩ Devolvido ao lote (simulado): segue para a assinatura.</div>` : nada ? `<div class="nada">✔ Nada a fazer: o agente resolveu dentro do limite dele.</div>` : `<div class="proximo">Próximo passo → ${esc(d.proximo || "")}</div>`}
       ${d.detalhe ? `<details><summary>Resumo escrito pelo agente</summary><div class="pre">${esc(d.detalhe)}</div></details>` : ""}${traceHtml(d)}</div></div>`;
 }
 
@@ -180,8 +193,9 @@ const caixaLer = (lote, tipo) => { try { const v = JSON.parse(guarda("caixa:" + 
 const caixaGravar = (lote, tipo, ids) => { try { localStorage.setItem("caixa:" + lote + ":" + tipo, JSON.stringify({ quando: Date.now(), ids })); } catch (e) {} };
 // tudo que o dia já enviou (as duas seções + o registro da versão anterior, que não separava por seção)
 const caixaDia = (lote) => { const rs = [caixaLer(lote), caixaLer(lote, "ligacao"), caixaLer(lote, "aprovacao")].filter(Boolean); return rs.length ? { quando: Math.max(...rs.map((r) => r.quando || 0)), ids: [...new Set(rs.flatMap((r) => r.ids))] } : null; };
-const caixaTotal = () => DIAS.reduce((s, d) => s + (caixaDia(d.lote) ? caixaDia(d.lote).ids.length : 0), 0);
+const caixaTotal = () => DIAS.reduce((s, d) => s + (caixaDia(d.lote) ? caixaDia(d.lote).ids.length : 0) + pedidosDevDoDia(d).length, 0);
 const hora = (ms) => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const pedidosDevDoDia = (l) => l.decisoes.filter((d) => (devLer(l.lote, d.id) || {}).emailEm).map((d) => { const x = ligacoesDoLote(l).find((y) => y.ts.includes(d.id)); return x ? (devLer(l.lote, d.id).via === "alcada" ? Emails.registroDevolucao : Emails.pedidoDevolucao)({ dia: l, d, x, pessoas: D.pessoas }) : null; }).filter(Boolean);
 const emailsDoDia = (l) => Emails.montar({ dia: l, ligs: ligacoesDoLote(l), aprs: pedidosDoLote(l), pessoas: D.pessoas });
 const pessoaTxt = (p) => `${esc(p.nome)} ${p.email ? "&lt;" + esc(p.email) + "&gt;" : '<b style="color:var(--vm)">(sem e-mail no cadastro)</b>'}`;
 const emailHtml = (m) => `<div class="email"><div><b>Para:</b> ${pessoaTxt(m.para)}${m.cc.length ? `<br><b>Cc:</b> ${m.cc.map(pessoaTxt).join(", ")}` : ""}</div>
@@ -193,7 +207,7 @@ function envioDaSecao(l, p, lista, tipo) {
   if (cx) return `<div class="envio"><span class="chip c-ci">✓ ${plural(cx.ids.length, "e-mail enviado", "e-mails enviados")} (simulado) às ${hora(cx.quando)}. Veja na Caixa de saída.</span></div>`;
   return `<div class="envio"><button class="btn" id="enviar-${tipo}" ${p.feito ? "" : "disabled"} style="margin:0;background:var(--vm);${p.feito ? "" : "opacity:.45;cursor:not-allowed"}">✉ Enviar e-mails (${lista.length})</button>${p.feito ? "" : '<span style="margin-left:10px;color:var(--mut);font-size:13px">Marque como lido para liberar o envio.</span>'}</div>`;
 }
-function abrirModal(l, emails, tipo) {
+function abrirModal(l, emails, tipo, opt = {}) {
   const pessoasN = new Set(emails.flatMap((m) => [m.para, ...m.cc].map((p) => p.email || p.nome))).size;
   const faltam = [...new Set(emails.flatMap((m) => m.semEmail))];
   const ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modal";
@@ -201,10 +215,10 @@ function abrirModal(l, emails, tipo) {
     <span class="pill am">Simulação</span>
     <h2 id="mt" style="font-weight:800;font-size:24px;color:var(--az);margin:12px 0 4px">Revisar antes de enviar</h2>
     <p style="color:var(--mut);font-size:14px">Nesta demonstração <b>nenhum e-mail é enviado de verdade</b>. Em produção, o mesmo texto sairia por SMTP, Outlook ou Gmail, e o envio ficaria registrado na Caixa de saída.</p>
-    <p class="kv"><b>${plural(emails.length, "e-mail", "e-mails")}</b> para <b>${plural(pessoasN, "pessoa", "pessoas")}</b>, cada um com o dossiê completo: por quê, telefone do cadastro, perguntas, se confirmar, se negar, títulos, provas e prazo.</p>
+    <p class="kv"><b>${plural(emails.length, "e-mail", "e-mails")}</b> para <b>${plural(pessoasN, "pessoa", "pessoas")}</b>, ${opt.resumo || "cada um com o dossiê completo: por quê, telefone do cadastro, perguntas, se confirmar, se negar, títulos, provas e prazo."}</p>
     ${faltam.length ? `<p class="kv" style="color:var(--vm)"><b>Sem e-mail no cadastro:</b> ${faltam.map(esc).join(", ")}. Essas pessoas precisam ser avisadas por outro meio.</p>` : ""}
     <div>${emails.map(emailHtml).join("")}</div>
-    <label class="ok" style="margin-top:14px"><input type="checkbox" id="confirmo"> Revisei os dossiês e confirmo que preciso escalar para estas pessoas</label>
+    <label class="ok" style="margin-top:14px"><input type="checkbox" id="confirmo"> ${opt.confirmo || "Revisei os dossiês e confirmo que preciso escalar para estas pessoas"}</label>
     <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn" id="enviarAgora" disabled style="margin:0;opacity:.45">Enviar ${plural(emails.length, "e-mail", "e-mails")}</button>
     <button class="btn" id="cancelar" style="margin:0;background:#fff;color:var(--az);border:2px solid var(--az)">Cancelar</button></div></div>`;
   document.body.appendChild(ov);
@@ -215,28 +229,51 @@ function abrirModal(l, emails, tipo) {
   const chk = ov.querySelector("#confirmo"), ok = ov.querySelector("#enviarAgora");
   chk.onchange = () => { ok.disabled = !chk.checked; ok.style.opacity = chk.checked ? 1 : 0.45; };
   ov.querySelector("#cancelar").onclick = fechar;
-  ok.onclick = () => { const y = window.scrollY; caixaGravar(l.lote, tipo, emails.map((m) => m.id)); fechar(); render(); window.scrollTo(0, y); };   // fica onde estava: o aviso de enviado aparece na própria seção
+  ok.onclick = () => { const y = window.scrollY; if (opt.aoEnviar) opt.aoEnviar(); else caixaGravar(l.lote, tipo, emails.map((m) => m.id)); fechar(); render(); window.scrollTo(0, y); };   // fica onde estava: o aviso de enviado aparece na própria seção
   chk.focus();
 }
 function caixa() {
   const enviados = DIAS.map((d) => [d, caixaDia(d.lote)]).filter(([, c]) => c);
   const topo = `<h2 class="sec">Caixa de saída</h2><p class="lede">E-mails que o tesoureiro revisou e enviou. <b>Simulado:</b> nesta demonstração nada sai de verdade; em produção, esta tela seria o registro de auditoria. Cada e-mail pode ser baixado como rascunho (.eml), que abre no Outlook para a pessoa só clicar em enviar.</p>`;
-  if (!enviados.length) return topo + `<div class="card">Nenhum e-mail enviado ainda. Em um dia com pendências, use "Enviar e-mails", revise e confirme.</div>`;
+  const devs = DIAS.map((d) => [d, pedidosDevDoDia(d)]).filter(([, p]) => p.length);
+  if (!enviados.length && !devs.length) return topo + `<div class="card">Nenhum e-mail enviado ainda. Em um dia com pendências, use "Enviar e-mails", revise e confirme.</div>`;
   return topo + enviados.map(([d, c]) => `<div class="card"><h3>Dia ${fmtD(d.data).slice(0, 5)} <span class="chip c-ci">enviado (simulado) em ${new Date(c.quando).toLocaleDateString("pt-BR")} às ${hora(c.quando)}</span></h3>`
-    + emailsDoDia(d).filter((m) => c.ids.includes(m.id)).map((m) => `${emailHtml(m)}<button class="btn" data-eml="${esc(m.id)}|${esc(d.lote)}" style="margin:2px 0 14px;padding:6px 14px;font-size:12px">Baixar rascunho (.eml)</button>`).join("") + `</div>`).join("");
+    + emailsDoDia(d).filter((m) => c.ids.includes(m.id)).map((m) => `${emailHtml(m)}<button class="btn" data-eml="${esc(m.id)}|${esc(d.lote)}" style="margin:2px 0 14px;padding:6px 14px;font-size:12px">Baixar rascunho (.eml)</button>`).join("") + `</div>`).join("")
+    + devs.map(([d, ps]) => `<div class="card"><h3>Dia ${fmtD(d.data).slice(0, 5)} · devoluções ao lote <span class="chip c-am">simulado</span></h3>` + ps.map((m) => { const v = devLer(d.lote, m.titulos[0]); const st = v.tipo === "devolvido" ? (v.via === "alcada" ? ["c-ci", "registrado (simulado)"] : ["c-ci", "aprovado (simulado)"]) : v.tipo === "reprovado" ? ["c-vm", "reprovado (simulado)"] : ["c-am", "aguardando aprovação"];
+      return `${emailHtml(m)}<p class="m"><span class="chip ${st[0]}">${st[1]}</span></p><button class="btn" data-eml="${esc(m.id)}|${esc(d.lote)}" style="margin:2px 0 14px;padding:6px 14px;font-size:12px">Baixar rascunho (.eml)</button>`; }).join("") + `</div>`).join("");
 }
 function baixarEml(chave) {
-  const [id, lote] = chave.split("|"), d = DIAS.find((x) => x.lote === lote), m = d && emailsDoDia(d).find((x) => x.id === id);
+  const [id, lote] = chave.split("|"), d = DIAS.find((x) => x.lote === lote), m = d && [...emailsDoDia(d), ...pedidosDevDoDia(d)].find((x) => x.id === id);
   if (!m) return;
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([Emails.eml(m)], { type: "message/rfc822" }));
   a.download = id.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") + ".eml"; document.body.appendChild(a); a.click(); a.remove();
+}
+
+function devolverHtml(l, x) {
+  const enviado = !!caixaLer(l.lote, "ligacao");   // só libera depois de enviar os e-mails de contato (a resposta do contato é que justifica devolver)
+  const ts = x.ts.map((id) => l.decisoes.find((d) => d.id === id)).filter((d) => d && d.final === "escalado");
+  if (!ts.length) return "";
+  const fecha = (d) => (l.lotes.find((b) => b.decisoes.includes(d)) || l).fecha;
+  const aut = Emails.autorizadorDe(x, D.pessoas);
+  const intro = (aut.alcada > 0 ? `Quem entrou em contato (${esc(aut.nome)}) autoriza a devolução até a alçada dela (${R(aut.alcada)}); acima disso, o pedido vai ao aprovador.` : "Todo pedido de devolução vai ao aprovador.") + " Cada devolução gera um e-mail (simulado) que você revisa antes de enviar. Depois do fechamento o ERP recusa. Simulado: nada é gravado no ERP.";
+  const linha = (d) => { const v = devLer(l.lote, d.id), quem = d.valor > 50000 ? "à diretora financeira" : "ao aprovador";
+    const chip = (c, t) => `<span class="chip ${c}">${t}</span>`;
+    let acao;
+    if (!v) acao = `<button class="btn" data-dev="${esc(d.id)}" ${enviado ? "" : "disabled"} style="margin:0;padding:6px 14px;font-size:12px;${enviado ? "" : "opacity:.45;cursor:not-allowed"}">${Emails.podeDevolver(d, x, D.pessoas) ? "↩ Devolver ao lote" : "↩ Pedir aprovação para devolver"}</button>`;
+    else if (v.tipo === "devolvido") acao = chip("c-ci", v.via === "aprovador" ? `↩ Devolvido ao lote após aprovação (simulado) às ${hora(v.quando)}` : `↩ Devolvido ao lote (simulado) às ${hora(v.quando)}${v.por ? " · autorizado por " + esc(v.por) : ""}`);
+    else if (v.tipo === "reprovado") acao = chip("c-vm", `Reprovado pelo aprovador (simulado) às ${hora(v.quando)}: o título continua fora do lote`);
+    else acao = chip("c-am", `Aguardando aprovação · pedido enviado ${quem} (simulado) às ${hora(v.quando)}`)
+      + `<span class="resp"><small>Ensaio da resposta do aprovador (simulação):</small> <button class="btn" data-resp="${esc(d.id)}|aprovou" style="margin:0;padding:5px 12px;font-size:12px">Simular: aprovou</button> <button class="btn" data-resp="${esc(d.id)}|reprovou" style="margin:0;padding:5px 12px;font-size:12px;background:#fff;color:var(--az);border:2px solid var(--az)">Simular: reprovou</button></span>`;
+    return `<div class="dv"><span><b>${esc(d.id)}</b> · ${R(d.valor)} · lote fecha às ${esc(fecha(d))}</span><span class="acoes">${acao}</span></div>`; };
+  return `<div class="devolver"><b>Se o fornecedor confirmar que está tudo certo, devolva ao lote antes do fechamento.</b>
+    <p class="m" style="color:var(--mut);font-size:13px;margin:4px 0 6px">${intro}</p>${enviado ? "" : '<p class="m" style="color:var(--vm);font-size:13px;margin:0 0 6px">Envie os e-mails de contato (depois de marcar como lido) para liberar estes botões.</p>'}${ts.map(linha).join("")}</div>`;
 }
 
 function render() {
   if (atual === "__caixa") { document.getElementById("app").innerHTML = navegacao() + caixa(); ligarNav(); document.querySelectorAll("[data-eml]").forEach((b) => b.onclick = () => baixarEml(b.dataset.eml)); return; }
   if (atual === "__hist") { document.getElementById("app").innerHTML = navegacao() + historico(); ligarNav(); return; }
   const l = DIAS.find((x) => x.lote === atual), a = analise(l);
-  const { ds, lib, sozinho, retidos, ligs, aprs, porAprov, passos, feitos, prox, sem } = a;
+  const { ds, lib, sozinho, retidos, dev, ligs, aprs, porAprov, passos, feitos, prox, sem } = a;
 
   let h = navegacao();
   h += `<section class="hero">
@@ -264,11 +301,12 @@ function render() {
   passos.forEach((p) => {
     let corpo = "";
     if (p.k === "ligar") corpo = ligs.map((x) => { const c = x.cs[0]; return `<div class="card" style="background:var(--bg);border:0;margin:10px 0 0">
-        <h3>${esc(x.forn)} ${x.ts.length ? `<span class="chip c-vm">${plural(x.ts.length, "título", "títulos")} fora do lote · ${R(x.valor)}</span>` : ""}${x.pagos.length ? `<span class="chip c-am">${plural(x.pagos.length, "pagamento já feito", "pagamentos já feitos")} · ${R(x.pagos.reduce((s, t) => s + t.valor, 0))}</span>` : ""}</h3>
+        <h3>${esc(x.forn)} ${x.ts.filter((t) => !devolvido(l.lote, t)).length ? `<span class="chip c-vm">${plural(x.ts.filter((t) => !devolvido(l.lote, t)).length, "título", "títulos")} fora do lote · ${R(x.ts.filter((t) => !devolvido(l.lote, t)).reduce((v, t) => v + (l.decisoes.find((d) => d.id === t)?.valor || 0), 0))}</span>` : ""}${x.pagos.length ? `<span class="chip c-am">${plural(x.pagos.length, "pagamento já feito", "pagamentos já feitos")} · ${R(x.pagos.reduce((s, t) => s + t.valor, 0))}</span>` : ""}</h3>
         <p class="kv"><b>Por quê:</b> ${esc(c.motivo)}</p>
         <p class="kv"><b>Quem entra em contato:</b> ${esc(c.para)}${c.copia && c.copia.length ? ` (com cópia para ${esc(c.copia.join(", "))})` : ""}<br><b>Telefone do cadastro:</b> ${esc(c.ligar_para)}</p>
         <div class="caixa" style="background:#fff"><b>Perguntas para o contato</b><ol class="perg">${lista(c.perguntas_para_a_ligacao).map((q) => `<li>${esc(q)}</li>`).join("")}</ol></div>
         <div class="caixas"><div class="caixa" style="background:#fff"><b>Se o fornecedor confirmar</b>${esc(c.se_confirmar)}</div><div class="caixa" style="background:#fff"><b>Se negar ou não atender</b>${esc(c.se_negar)}</div></div>
+        ${devolverHtml(l, x)}
         <p class="m" style="color:var(--mut);font-size:13px">${x.ts.length ? `O agente já retirou do lote: ${x.ts.map(esc).join(", ")}.` : ""}${x.pagos.length ? ` Já pagos: ${x.pagos.map((t) => `${esc(t.id)} (${R(t.valor)})`).join(", ")}. Esse dinheiro já saiu da conta.` : ""}</p>
         <details><summary>Provas reunidas pelo agente</summary><div class="pre">${esc(c.evidencias)}</div></details></div>`; }).join("");
     if (p.k === "aprovar") corpo = aprs.map((q) => { const d = ds.find((x) => x.id === q.titulo_id), i = q.info;
@@ -282,7 +320,7 @@ function render() {
   });
 
   h += `<h2 class="sec">Caso a caso</h2><p class="lede">Cada título que o agente tocou, o que ele fez e o que sobra para você. Os liberados ficam no fim.</p>`;
-  const casos = [...retidos, ...sozinho];
+  const casos = [...retidos, ...dev, ...sozinho];
   h += casos.length ? `<div class="card">${casos.map(casoHtml).join("")}</div>` : `<div class="card"><span class="chip c-ci">Nada a revisar</span> O agente não precisou tocar em nenhum título deste dia.</div>`;
   h += `<div class="card"><details><summary>Liberados: ${lib.length} títulos conferidos, ${R(soma(lib))}</summary><table><thead><tr><th>Título</th><th>Fornecedor</th><th class="n">Valor</th><th>Assinatura</th></tr></thead><tbody>${lib.map((d) => `<tr><td>${esc(d.id)}</td><td>${esc(d.forn)}</td><td class="n">${R(d.valor)}</td><td>${esc(d.assinatura || "analista")}</td></tr>`).join("")}</tbody></table></details></div>`;
 
@@ -296,6 +334,11 @@ function render() {
   h += `<p style="margin:30px 0 0;font-size:12.5px;color:var(--mut)">Ensaiando a demonstração? <button id="reiniciar" style="background:none;border:0;padding:0;font:inherit;color:var(--az);text-decoration:underline;cursor:pointer">Reiniciar as leituras e os e-mails enviados deste dia</button></p>`;
   document.getElementById("app").innerHTML = h;
   const reiniciar = document.getElementById("reiniciar"); if (reiniciar) reiniciar.onclick = () => { reiniciarDia(l.lote); render(); window.scrollTo(0, 0); };
+  document.querySelectorAll("[data-resp]").forEach((b) => b.onclick = () => { const y = window.scrollY, [id, r] = b.dataset.resp.split("|"); if (!l.decisoes.some((x) => x.id === id) || !devLer(l.lote, id) || devLer(l.lote, id).tipo !== "pedido") return; devGravar(l.lote, id, r === "aprovou" ? "devolvido" : "reprovado", r === "aprovou" ? { via: "aprovador" } : {}); render(); window.scrollTo(0, y); });
+  document.querySelectorAll("[data-dev]").forEach((b) => b.onclick = () => { const d = l.decisoes.find((x) => x.id === b.dataset.dev), x = d && ligacoesDoLote(l).find((y) => y.ts.includes(d.id)); if (!d || !x || !caixaLer(l.lote, "ligacao")) return;
+    const aut = Emails.podeDevolver(d, x, D.pessoas), m = (aut ? Emails.registroDevolucao : Emails.pedidoDevolucao)({ dia: l, d, x, pessoas: D.pessoas });
+    abrirModal(l, [m], "devolucao", { aoEnviar: () => devGravar(l.lote, d.id, aut ? "devolvido" : "pedido", { email: true, via: aut ? "alcada" : undefined, por: aut ? aut.nome : undefined }),
+      resumo: aut ? `com o registro da devolução: título, valor, lote, quem autorizou (${esc(aut.nome)}, dentro da alçada) e o prazo.` : "com o pedido de aprovação: título, valor, por que foi retirado, provas e o prazo do lote.", confirmo: aut ? "Revisei o e-mail e confirmo a devolução do título ao lote" : "Revisei o e-mail e confirmo o pedido de aprovação" }); });
   ligarNav();
   for (const [k, tipo] of Object.entries(TIPO_DO_PASSO)) { const b = document.getElementById("enviar-" + tipo); if (b) b.onclick = () => abrirModal(l, emailsDe(k), tipo); }
   document.querySelectorAll("input[data-k]").forEach((c) => c.onchange = () => { guarda(c.dataset.k, c.checked); const y = window.scrollY; render(); window.scrollTo(0, y); });

@@ -22,9 +22,22 @@ function calcular(dados = D.carregar(), extratoMeridiano = csv("extrato_banco_me
     meridiano: { n: mer.length, soma: soma(mer) }, confirmadoNoExtrato: { n: mer.filter((x) => x.debitoNoExtrato).length, soma: soma(mer.filter((x) => x.debitoNoExtrato)) },
     litoral: { n: extras.filter((x) => x.banco === "Banco Litoral").length }, detalhe: grupos.sort((a, b) => soma(b.extras) - soma(a.extras)) };
 }
-module.exports = { calcular };
+// O que o agente fez com as duplicatas DENTRO dos lotes que ele processou (a agenda, não o histórico já pago).
+// Duplicata = título da agenda com um gêmeo vivo (pago ou agendado) lançado ANTES dele; o mais antigo é o legítimo.
+function naJanela(dados = D.carregar(), estado = JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "saida", "agente_semana.json"), "utf8")).estado) {
+  const vivos = dados.cp.filter((t) => ["pago", "agendado"].includes(t.status) && T.normNF(t.numero_nf_digitado));
+  const soma = (a) => a.reduce((s, x) => s + x.valor, 0), grupo = (a) => ({ n: a.length, soma: soma(a) });
+  const dups = dados.agenda.map((a) => dados.cpById[a.titulo_id]).filter((t) => T.normNF(t.numero_nf_digitado) && T.gemeos(t, vivos).some((g) => g.data_lancamento < t.data_lancamento))
+    .map((t) => ({ id: t.titulo_id, valor: Number(t.valor), status: estado.titulos[t.titulo_id]?.status || "agendado" }));
+  return { titulosNaAgenda: dados.agenda.length, duplicatas: grupo(dups), canceladas: grupo(dups.filter((x) => x.status === "cancelado")),
+    retidasParaAprovacao: grupo(dups.filter((x) => x.status === "retirado")), aindaNoLote: grupo(dups.filter((x) => x.status !== "cancelado" && x.status !== "retirado")), ids: dups.map((x) => x.id) };
+}
+module.exports = { calcular, naJanela };
 
 if (require.main === module) {
+  const w = naJanela(); S.gravarAgente("duplicidades_na_janela.json", w);
+  const fm = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+  console.log(`Na janela (${w.titulosNaAgenda} títulos): ${w.duplicatas.n} duplicatas R$ ${fm(w.duplicatas.soma)} · canceladas ${w.canceladas.n} (R$ ${fm(w.canceladas.soma)}) · retidas p/ aprovação ${w.retidasParaAprovacao.n} (R$ ${fm(w.retidasParaAprovacao.soma)}) · ainda no lote ${w.aindaNoLote.n}`);
   const r = calcular(); S.gravarAgente("duplicidades_ja_pagas.json", r);
   const f = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
   console.log(`${r.grupos} grupos · ${r.pagamentosAMais} pagamentos a mais · R$ ${f(r.total)}`);

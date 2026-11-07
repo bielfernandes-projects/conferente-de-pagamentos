@@ -28,9 +28,9 @@ test("todo slide tem nota de fala; o da demo diz como abrir a página ", { skip:
 });
 
 test("números do slide vêm dos dados, não de texto digitado", { skip: !html || !temSaidas }, () => {
-  const dup = saida("duplicidades_ja_pagas.json"), placar = saida("placar.json");
+  const dup = saida("duplicidades_ja_pagas.json"), placar = saida("placar.json"), jan = saida("duplicidades_na_janela.json");
   const mil = (v) => "R$ " + Math.round(v / 1000).toLocaleString("pt-BR") + " mil";
-  for (const n of [mil(dup.total), mil(dup.confirmadoNoExtrato.soma), mil(placar.em_risco), mil(placar.cancelado)]) assert.ok(visivel.includes(n), n);
+  for (const n of [mil(dup.total), mil(dup.confirmadoNoExtrato.soma), mil(placar.em_risco), mil(placar.cancelado), mil(jan.duplicatas.soma), mil(jan.canceladas.soma), mil(jan.retidasParaAprovacao.soma)]) assert.ok(visivel.includes(n), n);
 });
 
 test("o número de testes no slide é o de testes que passam", { skip: !html || !temBase }, () => {

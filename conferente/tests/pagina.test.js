@@ -239,5 +239,175 @@ test("cada dia tem o link discreto para reiniciar a demonstração (e ele reinic
 
 test("passo lido: o botão de envio liberado NÃO fica esmaecido (só o conteúdo lido esmaece)", { skip: !html }, () => {
   assert.doesNotMatch(html, /\.passo\.feito\{opacity:\.62\}/);                                  // o cartão inteiro não esmaece mais
-  assert.match(html, /\.passo\.feito > div:last-child > :not\(label\.ok\):not\(\.envio\)\{opacity:\.62\}/);
+  // os cartões internos (fornecedor, com o botão "Devolver ao lote") também não esmaecem: o botão tem que continuar legível depois de "lido"
+  assert.ok(html.includes(".passo.feito > div:last-child > :not(label.ok):not(.envio):not(.card){opacity:.62}"));
+});
+
+// ---------- Devolver ao lote (SIMULADO) ----------
+const hojeLotes = () => D.lotes.filter((l) => l.data === dias[dias.length - 1]);
+const escaladosHoje = () => hojeLotes().flatMap((l) => l.decisoes).filter((d) => d.final === "escalado");
+const emailsEnviados = () => ({ [`caixa:${diaHoje()}:ligacao`]: JSON.stringify({ quando: Date.now(), ids: [] }) });   // os e-mails de contato do dia já foram enviados
+// roda a página com armazenamento de verdade, botões que respondem ao clique e uma janela de revisão (modal) de mentira.
+// alcada: troca a alçada de quem faz o contato (PS01) para exercitar o caminho "acima da alçada".
+function comCliques(inicial = {}, aba = null, enviado = true, alcada = null) {
+  const store = new Map(Object.entries({ ...(enviado ? emailsEnviados() : {}), ...inicial })), els = {}, botoes = { dev: [], resp: [] };
+  let modal = null;
+  const fake = () => ({ onclick: null, onchange: null, checked: false, disabled: false, style: {}, focus() {} });
+  const ls = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  const doc = { getElementById: (id) => (els[id] = els[id] || { innerHTML: "", querySelectorAll: () => [] }),
+    createElement: () => { const filhos = {}; const el = { innerHTML: "", className: "", id: "", remove() { if (modal === el) modal = null; }, addEventListener() {}, querySelector: (sel) => (filhos[sel] = filhos[sel] || fake()) }; return el; },
+    body: { appendChild: (el) => { modal = el; } }, addEventListener() {}, removeEventListener() {},
+    querySelectorAll: (sel) => { const a = sel === "[data-dev]" ? "dev" : sel === "[data-resp]" ? "resp" : null; if (!a) return [];
+      botoes[a] = (els.app ? els.app.innerHTML : "").split(`data-${a}="`).slice(1).map((p) => ({ dataset: { [a]: p.split('"')[0] }, onclick: null })); return botoes[a]; } };
+  let code = preparar(src.replace(/\{ const h = decodeURIComponent.*\r?\n/, "").replace(/render\(\);\s*$/, ""));
+  code = code.replace(/let atual = .*\r?\n/, (m) => (alcada != null ? `D.pessoas.porId.PS01.alcada = ${alcada};\n` : "") + (aba ? `let atual = "${aba}";\n` : m));
+  new Function("document", "localStorage", "location", "window", code + ";render();")(doc, ls, { hash: "" }, win);
+  const clica = (id) => botoes.dev.find((x) => x.dataset.dev === id).onclick();
+  const confirma = () => { const c = modal.querySelector("#confirmo"); c.checked = true; c.onchange(); modal.querySelector("#enviarAgora").onclick(); };
+  return { store, html: () => els.app.innerHTML, clica, confirma, devolve: (id) => { clica(id); confirma(); },
+    modalHtml: () => (modal ? modal.innerHTML : null), cancela: () => modal.querySelector("#cancelar").onclick(), envioTravado: () => (modal.querySelector("#enviarAgora").disabled = modal.querySelector("#enviarAgora").disabled),
+    responde: (id, r) => botoes.resp.find((x) => x.dataset.resp === `${id}|${r}`).onclick(), respostas: () => botoes.resp.map((x) => x.dataset.resp) };
+}
+const n = (h, re) => (h.match(re) || []).length;
+const retidos = (h) => +/<b>(\d+)<\/b><span>Retidos para uma pessoa/.exec(h)[1], liberados = (h) => +/<b>(\d+)<\/b><span>Liberados/.exec(h)[1];
+const semEnvioNaCaixa = /Caixa de saída<\/b><small>0 e-mail\(s\), simulado/;
+
+test("devolver ao lote: quem fez o contato (Renata, alçada R$ 50 mil) cobre todos os títulos, então todos têm 'Devolver ao lote'", { skip: !html }, () => {
+  const esc = escaladosHoje(), h = comCliques().html();
+  assert.ok(esc.length > 0 && esc.some((d) => d.valor > 5000), "o dia de hoje precisa ter título acima de R$ 5 mil para este teste valer");
+  assert.strictEqual(n(h, /data-dev="/g), esc.length);
+  assert.strictEqual(n(h, /↩ Devolver ao lote<\/button>/g), esc.length);
+  assert.doesNotMatch(h, /Pedir aprovação para devolver/);
+  assert.match(h, /Quem entrou em contato \(Renata Paiva\) autoriza a devolução até a alçada dela \(R\$ 50\.000,00\)/);
+  assert.match(h, /lote fecha às \d\d:\d\d/);
+  assert.match(h, /Depois do fechamento o ERP recusa\. Simulado: nada é gravado no ERP/);
+});
+
+test("devolver dentro da alçada: abre a revisão do e-mail (registro) com confirmação; só ao confirmar o título volta e os totais mudam", { skip: !html }, () => {
+  const d = escaladosHoje().find((x) => x.valor > 5000), p = comCliques(), h0 = p.html();
+  p.clica(d.id);
+  const m = p.modalHtml();
+  assert.match(m, /Revisar antes de enviar/);
+  assert.match(m, /Simulação/);
+  assert.match(m, new RegExp(`Registro: título ${d.id}`));
+  assert.match(m, /autorizado por Renata Paiva/);
+  assert.match(m, /Revisei o e-mail e confirmo a devolução do título ao lote/);
+  assert.ok(![...p.store.keys()].some((k) => k.startsWith("dev:")), "gravou antes de confirmar");
+  p.confirma();
+  assert.strictEqual(p.modalHtml(), null);                                                   // a janela fecha
+  const reg = JSON.parse(p.store.get(`dev:${diaHoje()}:${d.id}`));
+  assert.deepStrictEqual([reg.tipo, reg.via, reg.por], ["devolvido", "alcada", "Renata Paiva"]);
+  assert.ok(reg.emailEm > 0);
+  const h = p.html();
+  assert.strictEqual(retidos(h), retidos(h0) - 1);
+  assert.strictEqual(liberados(h), liberados(h0) + 1);
+  assert.match(h, /Devolvido ao lote \(simulado\) às \d\d:\d\d · autorizado por Renata Paiva/);
+  assert.doesNotMatch(h, new RegExp(`data-dev="${d.id}"`));
+});
+
+test("cancelar a revisão não devolve nada", { skip: !html }, () => {
+  const d = escaladosHoje()[0], p = comCliques();
+  p.clica(d.id); p.cancela();
+  assert.strictEqual(p.modalHtml(), null);
+  assert.ok(![...p.store.keys()].some((k) => k.startsWith("dev:")));
+  assert.match(p.html(), new RegExp(`data-dev="${d.id}"`));
+});
+
+test("acima da alçada de quem fez o contato: botão vira 'Pedir aprovação para devolver', o e-mail vai ao aprovador e o título CONTINUA fora do lote", { skip: !html }, () => {
+  const esc = escaladosHoje(), alto = esc.find((x) => x.valor > 5000), p = comCliques({}, null, true, 5000), h0 = p.html();
+  assert.strictEqual(n(h0, /↩ Pedir aprovação para devolver<\/button>/g), esc.filter((x) => x.valor > 5000).length);
+  assert.strictEqual(n(h0, /↩ Devolver ao lote<\/button>/g), esc.filter((x) => x.valor <= 5000).length);
+  p.clica(alto.id);
+  assert.match(p.modalHtml(), new RegExp(`Aprovar ou recusar: devolver o título ${alto.id}`));
+  assert.match(p.modalHtml(), /Revisei o e-mail e confirmo o pedido de aprovação/);
+  p.confirma();
+  const h = p.html();
+  assert.match(h, /Aguardando aprovação · pedido enviado ao aprovador \(simulado\)/);
+  assert.match(h, /Ensaio da resposta do aprovador \(simulação\)/);
+  assert.strictEqual(retidos(h), retidos(h0));
+  const reg = JSON.parse(p.store.get(`dev:${diaHoje()}:${alto.id}`));
+  assert.deepStrictEqual([reg.tipo, reg.via], ["pedido", undefined]);
+  assert.deepStrictEqual(p.respostas().sort(), [`${alto.id}|aprovou`, `${alto.id}|reprovou`]);
+});
+
+test("sem alçada nenhuma (alçada 0), todo título pede aprovação", { skip: !html }, () => {
+  const esc = escaladosHoje(), h = comCliques({}, null, true, 0).html();
+  assert.strictEqual(n(h, /↩ Pedir aprovação para devolver<\/button>/g), esc.length);
+  assert.match(h, /Todo pedido de devolução vai ao aprovador/);
+});
+
+test("resposta simulada do aprovador: APROVOU devolve o título (totais mudam, 'após aprovação'); REPROVOU mantém fora e encerra", { skip: !html }, () => {
+  const [a, r] = escaladosHoje().filter((x) => x.valor > 5000), p = comCliques({}, null, true, 5000), h0 = p.html();
+  assert.ok(a && r, "precisa de 2 títulos acima de R$ 5 mil");
+  p.devolve(a.id); p.devolve(r.id);
+  p.responde(a.id, "aprovou");
+  let h = p.html();
+  assert.match(h, /Devolvido ao lote após aprovação \(simulado\)/);
+  assert.strictEqual(retidos(h), retidos(h0) - 1);
+  assert.strictEqual(liberados(h), liberados(h0) + 1);
+  p.responde(r.id, "reprovou");
+  h = p.html();
+  assert.match(h, /Reprovado pelo aprovador \(simulado\)[^<]*o título continua fora do lote/);
+  assert.strictEqual(retidos(h), retidos(h0) - 1);
+  assert.deepStrictEqual(p.respostas(), []);
+  assert.strictEqual(JSON.parse(p.store.get(`dev:${diaHoje()}:${r.id}`)).tipo, "reprovado");
+  assert.strictEqual(JSON.parse(p.store.get(`dev:${diaHoje()}:${a.id}`)).via, "aprovador");
+});
+
+test("resposta simulada: só existe depois do pedido (sem pedido, ou já decidido, não há botões de ensaio)", { skip: !html }, () => {
+  const d = escaladosHoje().find((x) => x.valor > 5000);
+  assert.deepStrictEqual(comCliques().respostas(), []);
+  const reprovado = comCliques({ [`dev:${diaHoje()}:${d.id}`]: JSON.stringify({ quando: Date.now(), tipo: "reprovado", emailEm: Date.now() }) });
+  assert.deepStrictEqual(reprovado.respostas(), []);
+  assert.match(reprovado.html(), /Reprovado pelo aprovador \(simulado\)/);
+});
+
+test("Caixa de saída: devolução dentro da alçada entra como 'registrado', pedido entra como 'aguardando'/'aprovado'; o contador soma os dois", { skip: !html }, () => {
+  const p = comCliques({}, null, true, 6000);   // alçada 6 mil: cobre os títulos de até R$ 6 mil; o resto vira pedido
+  const baixo = escaladosHoje().filter((x) => x.valor <= 6000)[0], alto = escaladosHoje().find((x) => x.valor > 6000);
+  assert.match(p.html(), semEnvioNaCaixa);
+  p.devolve(baixo.id);
+  assert.match(p.html(), /Caixa de saída<\/b><small>1 e-mail\(s\), simulado/);
+  p.devolve(alto.id);
+  assert.match(p.html(), /Caixa de saída<\/b><small>2 e-mail\(s\), simulado/);
+  const cx = comCliques(Object.fromEntries(p.store), "__caixa", true, 6000).html();
+  assert.match(cx, /devoluções ao lote/);
+  assert.match(cx, new RegExp(`Registro: título ${baixo.id}`));
+  assert.match(cx, new RegExp(`devolver o título ${alto.id}`));
+  assert.match(cx, /registrado \(simulado\)/);
+  assert.match(cx, /aguardando aprovação/);
+  assert.match(cx, /Baixar rascunho \(\.eml\)/);
+  p.responde(alto.id, "aprovou");
+  assert.match(comCliques(Object.fromEntries(p.store), "__caixa", true, 6000).html(), /aprovado \(simulado\)/);
+});
+
+test("devolver ao lote: o estado guardado sobrevive a recarregar e o reinício do dia o apaga (só do dia mais recente)", { skip: !html }, () => {
+  const d = escaladosHoje()[0], outro = `dev:${diaAnterior()}:X`;
+  const inicial = { [`dev:${diaHoje()}:${d.id}`]: JSON.stringify({ quando: Date.now(), tipo: "devolvido", via: "alcada", por: "Renata Paiva" }), [outro]: "{}" };
+  assert.match(comCliques(inicial).html(), /Devolvido ao lote \(simulado\)/);
+  const { store } = comArmazenamento("#reiniciar", inicial);
+  assert.ok(![...store.keys()].some((k) => k.startsWith(`dev:${diaHoje()}:`)), "sobrou devolução de hoje");
+  assert.ok(store.has(outro), "apagou de outro dia");
+});
+
+test("devolver ao lote: registro quebrado ou desconhecido no armazenamento é ignorado", { skip: !html }, () => {
+  const d = escaladosHoje()[0];
+  for (const lixo of ["1", "{", '{"tipo":"hackeado"}', "null"]) assert.doesNotMatch(comCliques({ [`dev:${diaHoje()}:${d.id}`]: lixo }).html(), /Devolvido ao lote \(simulado\)|Aguardando aprovação/, lixo);
+});
+
+test("devolver ao lote só é liberado depois de enviar os e-mails de contato: antes, botões travados, com aviso, e o clique é ignorado", { skip: !html }, () => {
+  const esc = escaladosHoje(), p = comCliques({}, null, false), h = p.html();
+  assert.strictEqual(n(h, /data-dev="[^"]*" disabled /g), esc.length);
+  assert.match(h, /Envie os e-mails de contato \(depois de marcar como lido\) para liberar estes botões/);
+  p.clica(esc[0].id);                                                                         // mesmo clicando (à força), nada abre nem é gravado
+  assert.strictEqual(p.modalHtml(), null);
+  assert.ok(![...p.store.keys()].some((k) => k.startsWith("dev:")));
+  const liberado = comCliques({}, null, true).html();
+  assert.strictEqual(n(liberado, /data-dev="[^"]*" disabled /g), 0);
+  assert.doesNotMatch(liberado, /Envie os e-mails de contato \(depois de marcar como lido\)/);
+});
+
+test("o envio de OUTRA seção (aprovação) não libera o devolver: só o envio dos e-mails de contato", { skip: !html }, () => {
+  const so = { [`caixa:${diaHoje()}:aprovacao`]: JSON.stringify({ quando: Date.now(), ids: [] }) };
+  assert.strictEqual(n(comCliques(so, null, false).html(), /data-dev="[^"]*" disabled /g), escaladosHoje().length);
 });
