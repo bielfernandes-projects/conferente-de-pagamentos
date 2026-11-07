@@ -9,7 +9,7 @@ function doCsv() {
   return {
     forn: porId(csv("fornecedores.csv"), "fornecedor_id"), cp, cpById: porId(cp, "titulo_id"),
     agenda: csv("agenda_remessa.csv"), nfs: csv("notas_fiscais.csv"), dups: agrupar(csv("nf_duplicatas.csv"), (x) => x.chave_acesso),
-    oc: porId(csv("pedidos_compra.csv"), "oc_id"), alt: csv("alteracoes_cadastro.csv"), msgs: csv("comunicacoes_fornecedores.csv"),
+    oc: porId(csv("pedidos_compra.csv"), "oc_id"), alt: csv("alteracoes_cadastro.csv"), msgs: csv("comunicacoes_fornecedores.csv"), usuarios: csv("usuarios_sistema.csv"),
   };
 }
 

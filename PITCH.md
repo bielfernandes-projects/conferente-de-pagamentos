@@ -81,3 +81,9 @@ Regra de ouro do workshop: se for cortar, corte texto, não a demonstração. **
 3. 12–22 s: o dossiê da Embalarte: telefone do cadastro, perguntas, "se confirmar / se negar".
 4. 22–30 s: "Caso a caso", Duraplast: "Cancelou o título duplicado" e "Nada a fazer".
 5. 30–35 s: botão "Marcar o dia inteiro como resolvido": o dia vira "✓ Resolvido".
+
+## Visão de produto: botão "Enviar e-mails" (SIMULADO)
+Depois que o tesoureiro vê tudo e confirma que precisa escalar para pessoas acima dele, ele clica em **"Enviar e-mails"** (em "Seus próximos passos"). A tela mostra cada e-mail (Para, Cc, assunto e o **dossiê completo**: por quê, telefone do cadastro, perguntas, se confirmar, se negar, títulos, o que o agente já fez, provas e prazo), exige a confirmação e registra na aba **Caixa de saída**, com o rascunho `.eml` de cada um.
+- **É uma demonstração do que o produto teria: nenhum e-mail é enviado de verdade.** Em produção, o mesmo texto sairia por um adaptador (SMTP, Outlook ou Gmail) com as credenciais da empresa; essas integrações são evolução, não parte desta entrega.
+- Quem recebe: a pessoa que o agente apontou no dossiê, com as outras em cópia; pedidos de aprovação vão para o aprovador do limite (acima de R$ 50 mil, para a diretora). Os endereços vêm só do cadastro de usuários da base.
+- Na demo é **opcional (10 s)**: só se sobrar tempo dos 5 minutos. Diga "é simulado" antes que alguém pergunte.

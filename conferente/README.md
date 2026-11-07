@@ -23,6 +23,7 @@ A tela do tesoureiro é `saida/index.html` (um HTML único, funciona offline). O
 | `erp.js` | ERP simulado, ferramentas do agente e as **travas** (alçada, evidência, gêmeo para cancelar, uma ligação por fornecedor, título escalado sai do lote). `desfecho()` é o veredito final do título. |
 | `agente.js` | Laço do agente (LLM com chamada de ferramentas). `resolver(..., chat)` aceita um chat falso nos testes. |
 | `comunicacoes.js` · `llm.js` | Sinais objetivos dos e-mails (código) e leitura do texto (IA). A IA só sobe o risco. |
+| `emails.js` | Monta os e-mails de escalonamento com o **dossiê completo** (por quê, telefone do cadastro, perguntas, se confirmar/negar, títulos, provas, prazo) para as pessoas certas. **Puro: não envia nada.** A tela usa o mesmo módulo; o "envio" é simulado (Caixa de saída e rascunho .eml). Em produção entraria um adaptador (SMTP, Outlook, Gmail). |
 | `saida.js` | Único lugar que sabe os arquivos de `saida/`, os cortes de data e o histórico. |
 | `pagina.js` · `pagina.template.html` | Gera a tela. |
 | `verifica.js` | Verificador independente: usa só os **números** da política, não o código do ERP. |

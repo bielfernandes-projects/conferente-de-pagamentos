@@ -61,6 +61,8 @@ ag.estado.aprovacoes.forEach((a) => { const d = lotes.flatMap((l) => l.decisoes)
 // Um dossiê/pedido pode tratar de um título que NÃO está em nenhum lote (ex.: duplicidade já paga). Para não ficar invisível,
 // ligamos cada um ao(s) caso(s) em que o agente o criou; a tela mostra o item no lote desse caso.
 const dados0 = require("./dados").carregar();
+const { Emails } = require("./emails");
+const pessoas = Emails.pessoasDe(dados0.usuarios);   // endereços SÓ do cadastro de usuários; nada é inventado
 const casosDoDossie = {}, casosDoPedido = {};
 ag.resultados.forEach((r) => r.trace.forEach((s) => {
   const x = s.resultado || {};
@@ -74,13 +76,15 @@ const aprovacoes = ag.estado.aprovacoes.map((a) => ({ ...a, casos: [...(casosDoP
 const diasLista = [...new Set(lotes.map((l) => l.data))].sort();   // período real coberto pelos dados (não escrito à mão)
 placar.dias = diasLista.length; placar.de = diasLista[0]; placar.ate = diasLista[diasLista.length - 1];
 S.gravarAgente("placar.json", placar);   // o deck do pitch lê estes números daqui
-const data = { lotes, placar, ligacoes, aprovacoes, modelo: ag.modelo, uso: ag.uso, historico: S.lerHistorico() };
+const data = { lotes, placar, ligacoes, aprovacoes, pessoas, modelo: ag.modelo, uso: ag.uso, historico: S.lerHistorico() };
 
 // Kit de marca embutido (offline): fontes Poppins e logo, sem alteração. Ver marca/.
 const b64 = (f) => fs.readFileSync(path.join(__dirname, "marca", f)).toString("base64");
 const fontes = [[400, "Poppins"], [500, "Poppins"], [600, "Poppins"], [700, "Poppins"], [800, "Poppins"]]
   .map(([w, n]) => `@font-face{font-family:'${n}';font-weight:${w};font-style:normal;font-display:swap;src:url(data:font/woff2;base64,${b64("poppins-" + w + ".woff2")}) format('woff2')}`).join("");
 const html = fs.readFileSync(path.join(__dirname, "pagina.template.html"), "utf8")
-  .replace("__FONTES__", () => fontes).replace("__LOGO__", () => "data:image/png;base64," + b64("logo.png")).replace("__DATA__", () => JSON.stringify(data).replace(/</g, "\\u003c"));
+  .replace("__FONTES__", () => fontes).replace("__LOGO__", () => "data:image/png;base64," + b64("logo.png"))
+  .replace("__EMAILS_JS__", () => fs.readFileSync(path.join(__dirname, "emails.js"), "utf8"))   // a MESMA regra de e-mails dos testes, embutida na página
+  .replace("__DATA__", () => JSON.stringify(data).replace(/</g, "\\u003c"));
 fs.writeFileSync(path.join(S.DIR, "index.html"), html);
 console.log("ok →", path.join(S.DIR, "index.html"), "|", lotes.length, "lotes |", JSON.stringify(placar));

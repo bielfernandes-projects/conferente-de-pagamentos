@@ -69,6 +69,10 @@ details{margin-top:10px}summary{cursor:pointer;color:var(--az);font-weight:600;f
 .step{font-size:12.5px;margin:4px 0}.step b{color:var(--az)}.step small{color:var(--mut);display:block}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--bd);vertical-align:top}th{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}td.n,th.n{text-align:right;white-space:nowrap}
 footer{margin:34px 0 40px;font-size:12px;color:var(--mut);max-width:90ch}
+/* revisão e envio de e-mails (simulado) */
+.overlay{position:fixed;inset:0;background:rgba(15,39,71,.62);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto}
+.modal{background:#fff;border-radius:28px;max-width:880px;width:100%;padding:28px;margin:auto}
+.email{background:var(--bg);border-radius:18px;padding:12px 16px;margin:8px 0;font-size:13.5px}
 /* celular: nada pode empurrar a largura da página */
 .hero>*,.passo>*,.stats>*{min-width:0}
 .card,.bloco,.stat,.pre,.kv,.caixa,.linha>*{overflow-wrap:anywhere}
@@ -84,6 +88,7 @@ footer{margin:34px 0 40px;font-size:12px;color:var(--mut);max-width:90ch}
 <footer class="wrap">Dados sintéticos do GoHacks Talent 2026. O ERP é simulado. O agente só age dentro do limite de aprovação do analista (R$ 5 mil); ligações, aprovações e a assinatura dos lotes são sempre de uma pessoa. Valores do placar são estimativas a partir das ações do agente, sem gabarito oficial.</footer>
 <script>
 const D = __DATA__;
+__EMAILS_JS__
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const R = (v) => "R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const soma = (a) => a.reduce((s, x) => s + x.valor, 0);
@@ -141,7 +146,8 @@ function navegacao() {
   const res = an.filter(([, a]) => a.estado === "res").length;
   const rotulo = (a) => ({ res: "✓ Resolvido", ass: "Só assinar", pen: plural(a.pend, "pendência", "pendências") }[a.estado]);
   return `<div class="dias" role="tablist" aria-label="Dias">${an.map(([d, a]) => `<button class="dia ${a.estado}" role="tab" aria-selected="${d.lote === atual}" data-l="${d.lote}">${d === DIAS[0] ? '<span class="hoje">Hoje</span>' : ""}<b>${fmtD(d.data).slice(0, 5)}</b><small>${esc(diaSemana(d.data))} · ${d.decisoes.length} títulos</small><span class="e">${rotulo(a)}</span></button>`).join("")}
-    <button class="dia" role="tab" aria-selected="${atual === "__hist"}" data-l="__hist"><b>Histórico</b><small>execuções do agente</small></button></div>
+    <button class="dia" role="tab" aria-selected="${atual === "__hist"}" data-l="__hist"><b>Histórico</b><small>execuções do agente</small></button>
+    <button class="dia" role="tab" aria-selected="${atual === "__caixa"}" data-l="__caixa"><b>Caixa de saída</b><small>${caixaTotal()} e-mail(s), simulado</small></button></div>
     <p class="legenda"><b>${res} de ${DIAS.length} dias resolvidos.</b> Um dia fica resolvido quando todos os passos dele estão marcados como feitos. <b>Hoje é ${fmtD(DIAS[0].data).slice(0, 5)}</b>, o dia mais recente da base: a página abre sempre nele.</p>`;
 }
 const ligarNav = () => document.querySelectorAll(".dia").forEach((b) => b.onclick = () => { atual = b.dataset.l; render(); window.scrollTo(0, 0); });
@@ -160,7 +166,63 @@ function casoHtml(d) {
       ${d.detalhe ? `<details><summary>Resumo escrito pelo agente</summary><div class="pre">${esc(d.detalhe)}</div></details>` : ""}${traceHtml(d)}</div></div>`;
 }
 
+// ---------- E-mails de escalonamento (SIMULADO: nada é enviado de verdade) ----------
+// O texto vem de Emails.montar (emails.js, o mesmo módulo dos testes). "Enviar" só registra na Caixa de saída; em produção entraria um adaptador (SMTP, Outlook, Gmail).
+const caixaLer = (lote) => { try { const v = JSON.parse(guarda("caixa:" + lote) || "null"); return v && typeof v === "object" && Array.isArray(v.ids) ? v : null; } catch (e) { return null; } };
+const caixaGravar = (lote, ids) => { try { localStorage.setItem("caixa:" + lote, JSON.stringify({ quando: Date.now(), ids })); } catch (e) {} };
+const caixaTotal = () => DIAS.reduce((s, d) => s + (caixaLer(d.lote) ? caixaLer(d.lote).ids.length : 0), 0);
+const hora = (ms) => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+const emailsDoDia = (l) => Emails.montar({ dia: l, ligs: ligacoesDoLote(l), aprs: pedidosDoLote(l), pessoas: D.pessoas });
+const pessoaTxt = (p) => `${esc(p.nome)} ${p.email ? "&lt;" + esc(p.email) + "&gt;" : '<b style="color:var(--vm)">(sem e-mail no cadastro)</b>'}`;
+const emailHtml = (m) => `<div class="email"><div><b>Para:</b> ${pessoaTxt(m.para)}${m.cc.length ? `<br><b>Cc:</b> ${m.cc.map(pessoaTxt).join(", ")}` : ""}</div>
+  <div style="font-weight:700;margin:6px 0">${esc(m.assunto)}</div><details><summary>Ver o e-mail completo</summary><div class="pre">${esc(m.corpo)}</div></details></div>`;
+function controleEnvio(l, emails) {
+  if (!emails.length) return "";
+  const cx = caixaLer(l.lote);
+  if (cx) return `<span class="chip c-ci" style="margin-left:10px">✓ ${plural(cx.ids.length, "e-mail enviado", "e-mails enviados")} (simulado) às ${hora(cx.quando)}. Veja na Caixa de saída.</span>`;
+  return `<button class="btn" id="enviar" style="margin:0 0 14px 10px;background:var(--vm)">✉ Enviar e-mails (${emails.length})</button>`;
+}
+function abrirModal(l, emails) {
+  const pessoasN = new Set(emails.flatMap((m) => [m.para, ...m.cc].map((p) => p.email || p.nome))).size;
+  const faltam = [...new Set(emails.flatMap((m) => m.semEmail))];
+  const ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modal";
+  ov.innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-labelledby="mt">
+    <span class="pill am">Simulação</span>
+    <h2 id="mt" style="font-weight:800;font-size:24px;color:var(--az);margin:12px 0 4px">Revisar antes de enviar</h2>
+    <p style="color:var(--mut);font-size:14px">Nesta demonstração <b>nenhum e-mail é enviado de verdade</b>. Em produção, o mesmo texto sairia por SMTP, Outlook ou Gmail, e o envio ficaria registrado na Caixa de saída.</p>
+    <p class="kv"><b>${plural(emails.length, "e-mail", "e-mails")}</b> para <b>${plural(pessoasN, "pessoa", "pessoas")}</b>, cada um com o dossiê completo: por quê, telefone do cadastro, perguntas, se confirmar, se negar, títulos, provas e prazo.</p>
+    ${faltam.length ? `<p class="kv" style="color:var(--vm)"><b>Sem e-mail no cadastro:</b> ${faltam.map(esc).join(", ")}. Essas pessoas precisam ser avisadas por outro meio.</p>` : ""}
+    <div>${emails.map(emailHtml).join("")}</div>
+    <label class="ok" style="margin-top:14px"><input type="checkbox" id="confirmo"> Revisei os dossiês e confirmo que preciso escalar para estas pessoas</label>
+    <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap"><button class="btn" id="enviarAgora" disabled style="margin:0;opacity:.45">Enviar ${plural(emails.length, "e-mail", "e-mails")}</button>
+    <button class="btn" id="cancelar" style="margin:0;background:#fff;color:var(--az);border:2px solid var(--az)">Cancelar</button></div></div>`;
+  document.body.appendChild(ov);
+  const tecla = (e) => { if (e.key === "Escape") fechar(); };
+  const fechar = () => { ov.remove(); document.removeEventListener("keydown", tecla); };
+  document.addEventListener("keydown", tecla);
+  ov.addEventListener("click", (e) => { if (e.target === ov) fechar(); });
+  const chk = ov.querySelector("#confirmo"), ok = ov.querySelector("#enviarAgora");
+  chk.onchange = () => { ok.disabled = !chk.checked; ok.style.opacity = chk.checked ? 1 : 0.45; };
+  ov.querySelector("#cancelar").onclick = fechar;
+  ok.onclick = () => { caixaGravar(l.lote, emails.map((m) => m.id)); fechar(); render(); window.scrollTo(0, 0); };
+  chk.focus();
+}
+function caixa() {
+  const enviados = DIAS.map((d) => [d, caixaLer(d.lote)]).filter(([, c]) => c);
+  const topo = `<h2 class="sec">Caixa de saída</h2><p class="lede">E-mails que o tesoureiro revisou e enviou. <b>Simulado:</b> nesta demonstração nada sai de verdade; em produção, esta tela seria o registro de auditoria. Cada e-mail pode ser baixado como rascunho (.eml), que abre no Outlook para a pessoa só clicar em enviar.</p>`;
+  if (!enviados.length) return topo + `<div class="card">Nenhum e-mail enviado ainda. Em um dia com pendências, use "Enviar e-mails", revise e confirme.</div>`;
+  return topo + enviados.map(([d, c]) => `<div class="card"><h3>Dia ${fmtD(d.data).slice(0, 5)} <span class="chip c-ci">enviado (simulado) em ${new Date(c.quando).toLocaleDateString("pt-BR")} às ${hora(c.quando)}</span></h3>`
+    + emailsDoDia(d).filter((m) => c.ids.includes(m.id)).map((m) => `${emailHtml(m)}<button class="btn" data-eml="${esc(m.id)}|${esc(d.lote)}" style="margin:2px 0 14px;padding:6px 14px;font-size:12px">Baixar rascunho (.eml)</button>`).join("") + `</div>`).join("");
+}
+function baixarEml(chave) {
+  const [id, lote] = chave.split("|"), d = DIAS.find((x) => x.lote === lote), m = d && emailsDoDia(d).find((x) => x.id === id);
+  if (!m) return;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([Emails.eml(m)], { type: "message/rfc822" }));
+  a.download = id.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") + ".eml"; document.body.appendChild(a); a.click(); a.remove();
+}
+
 function render() {
+  if (atual === "__caixa") { document.getElementById("app").innerHTML = navegacao() + caixa(); ligarNav(); document.querySelectorAll("[data-eml]").forEach((b) => b.onclick = () => baixarEml(b.dataset.eml)); return; }
   if (atual === "__hist") { document.getElementById("app").innerHTML = navegacao() + historico(); ligarNav(); return; }
   const l = DIAS.find((x) => x.lote === atual), a = analise(l);
   const { ds, lib, sozinho, retidos, ligs, aprs, porAprov, passos, feitos, prox, sem } = a;
@@ -184,8 +246,9 @@ function render() {
       <div class="stat amarelo"><b>${sozinho.length}</b><span>Resolvidos sozinho</span><small>cancelou duplicata ou corrigiu valor, dentro do limite de R$ 5 mil</small></div>
       <div class="stat verm"><b>${retidos.length}</b><span>Retidos para uma pessoa</span><small>saíram do lote para não serem pagos errado (${R(soma(retidos))})</small></div></div>`;
 
+  const emails = emailsDoDia(l);
   h += `<h2 class="sec">Seus próximos passos</h2><p class="lede">Na ordem. Marque cada um quando terminar: a barra lá em cima acompanha, e o dia fica resolvido quando todos estiverem feitos.</p>
-    <button class="btn" id="todos" style="margin:0 0 14px">${feitos === passos.length ? "Reabrir o dia" : "Marcar o dia inteiro como resolvido"}</button>`;
+    <button class="btn" id="todos" style="margin:0 0 14px">${feitos === passos.length ? "Reabrir o dia" : "Marcar o dia inteiro como resolvido"}</button>${controleEnvio(l, emails)}`;
   passos.forEach((p) => {
     let corpo = "";
     if (p.k === "ligar") corpo = ligs.map((x) => { const c = x.cs[0]; return `<div class="card" style="background:var(--bg);border:0;margin:10px 0 0">
@@ -220,6 +283,8 @@ function render() {
     <p class="lede" style="margin-top:12px">Antes, o tesoureiro assinava o lote sem conferir título por título. Agora, ${p.titulos} títulos conferidos e a pessoa só entra onde a política exige. Agente: ${esc(D.modelo)}, ${D.uso.chamadas} chamadas.</p>`;
   document.getElementById("app").innerHTML = h;
   ligarNav();
+  const enviar = document.getElementById("enviar");
+  if (enviar) enviar.onclick = () => abrirModal(l, emails);
   const todos = document.getElementById("todos");
   if (todos) todos.onclick = () => { const tudo = feitos !== passos.length; passos.forEach((p) => guarda(p.chave, tudo)); render(); window.scrollTo(0, 0); };
   document.querySelectorAll("input[data-k]").forEach((c) => c.onchange = () => { guarda(c.dataset.k, c.checked); const y = window.scrollY; render(); window.scrollTo(0, y); });
