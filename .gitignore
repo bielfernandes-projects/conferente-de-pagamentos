@@ -20,9 +20,10 @@ marketing/
 .frontend-slides/
 skills-lock.json
 
-# --- gerados a partir da base do evento (prints da tela e deck com os dados embutidos): o repositório guarda o CÓDIGO que os gera ---
-pitch/pitch.html
+# --- prints de apoio (já embutidos no deck, que vai no repositório) ---
 pitch/assets/
 
 # --- saídas geradas (rodadas do agente, página, baseline): derivam da base do evento e são regeneráveis ---
-conferente/saida/
+conferente/saida/*
+# ...exceto a tela pronta: o pré-júri abre direto, sem rodar nada
+!conferente/saida/index.html

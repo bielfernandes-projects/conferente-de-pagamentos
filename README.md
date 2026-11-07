@@ -33,3 +33,14 @@ A base é da organização do evento. Para rodar, extraia o zip `GoHacks_Talent_
 
 - O token do AI Proxy fica em `conferente/.env` (`AI_PROXY_API_KEY=...`), **fora do git** (`.gitignore`). Nunca coloque o token em código, log ou mensagem.
 - Princípio de projeto: as travas que protegem dinheiro são calculadas em **código**, não em prompt. A justificativa que o modelo escreve não vale; o sistema confere sozinho.
+
+## Para quem vai avaliar (abra sem rodar nada)
+
+| O quê | Onde | Para quê |
+|---|---|---|
+| **Tela do tesoureiro** | [`conferente/saida/index.html`](conferente/saida/index.html) (baixe e abra no navegador) | Abre em **"Hoje" (13/11)**. Mostra, dia a dia, o que o agente fez e qual é o próximo passo da pessoa. Cada caso tem o passo a passo do agente. |
+| **Deck do pitch (5 min)** | [`pitch/pitch.html`](pitch/pitch.html) | Setas navegam, **N** mostra as notas de fala, **T** liga o cronômetro. Os 3 últimos slides são o plano B. |
+| **Como a IA foi dirigida e verificada** | [`VERIFICACAO.md`](VERIFICACAO.md) | Cada entrega da IA, como foi conferida, onde errou e como foi corrigida. |
+| **Roteiro e premissas** | [`PITCH.md`](PITCH.md) | Esqueleto SOAR, roteiro e o que **não** prometemos (ex.: os R$ 404 mil são "pagos a mais" pela nossa regra; o tempo manual é premissa a validar). |
+
+**Testes** (`node --test conferente/tests/ pitch/`): os de regras, duplicidades, tela e deck rodam sem nada; os que usam títulos reais do desafio precisam da base em `base-de-dados/` (veja acima). O agente de IA só roda com o token do AI Proxy; a tela e o deck já trazem o resultado de uma rodada completa (03/11 a 13/11).
