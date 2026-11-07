@@ -147,3 +147,8 @@ Log de tudo que a IA entregou, como eu verifiquei e onde ela errou. Alimenta o r
 - A IA errou: o cartão inteiro do passo lido ficava a 62% de opacidade e o botão recém-liberado parecia desabilitado. Agora só o conteúdo esmaece (teste novo). Também escrevi um teste com expressão regular que perdeu as barras invertidas; troquei por leitura sem regex.
 - Verifiquei: 74 testes de `conferente` passam. Mutações: reinício que não apaga as leituras, e botão sem a trava `disabled`, derrubaram um teste cada. Prova em Chrome real com perfil persistente: com leituras gravadas a página mostrou "2 de 2"; após abrir com `#reiniciar`, "0 de 2", e reabrindo sem o hash continuou "0 de 2".
 - NÃO verificado: o estado do navegador pessoal do Gabriel (abri a página com `#reiniciar` nele, mas não consigo ver a tela dele). Nada foi enviado ao GitHub.
+
+## Deck enxuto + slide da demo ao vivo
+- O que a IA fez: cortou o texto de todos os slides (o elevator completo ficou só nas notas do slide 1) e trocou o slide da demo por "Agora, ao vivo.", com 4 passos (abrir o dia, ler o dossiê, marcar como lido, enviar e-mails simulado). A demo passou a ser o dia 13/11, e as notas mandam abrir a página com `#reiniciar` antes. O caso extra do dia 03/11 (Duraplast) ficou só como opção. Adicionei ao PITCH.md as respostas de bolso para as quatro perguntas da banca.
+- Verifiquei: 7 testes do deck passam e vi os slides 1, 3, 4, 5, 6, 7 e 8 em tela cheia (1920×1080): sem texto cortado nem sobreposição.
+- NÃO verificado: o tempo real da demo ao vivo (80 s) e o dossiê do dia 13/11 na tela do pitch; o deck não foi ensaiado em voz alta.

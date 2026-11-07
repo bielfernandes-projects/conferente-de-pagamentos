@@ -21,16 +21,10 @@ test("segue a estrutura de 5 minutos do workshop, na ordem", { skip: !html }, ()
   assert.deepStrictEqual(rot.slice(0, 7), ["Abertura", "A dor", "Visão 360", "O agente", "Demo", "Como fez", "Impacto"]);
 });
 
-test("tem 3 slides de plano B depois do fechamento", { skip: !html }, () => {
-  assert.strictEqual(secoes.length - principais.length, 3);
-  assert.ok(secoes.slice(principais.length).every((s) => /data-ap=/.test(s[1])));
-});
-
-test("todo slide tem nota de fala; o da demo diz como abrir a página e cita o plano B", { skip: !html }, () => {
+test("todo slide tem nota de fala; o da demo diz como abrir a página ", { skip: !html }, () => {
   for (const s of secoes) assert.match(s[2], /<aside class="notes">[\s\S]{40,}<\/aside>/);
   const demo = principais[4][2];
   assert.match(demo, /index\.html#dia-2026-11-03/);
-  assert.match(demo, /PLANO B/);
 });
 
 test("números do slide vêm dos dados, não de texto digitado", { skip: !html || !temSaidas }, () => {

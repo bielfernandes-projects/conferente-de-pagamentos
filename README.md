@@ -9,7 +9,7 @@ Projeto do **GoHacks Talent 2026 (Gogroup), desafio 2: Pagamentos.** Um agente d
 | Pasta | O que é |
 |---|---|
 | [`conferente/`](conferente/README.md) | O sistema: motor de regras, ERP simulado com as travas, agente, tela do tesoureiro e testes |
-| [`pitch/`](pitch/) | O deck dos 5 minutos (formato do workshop, kit de marca) e os prints do plano B |
+| [`pitch/`](pitch/) | O deck dos 5 minutos (formato do workshop, kit de marca) |
 | `PITCH.md` | Esqueleto SOAR, roteiro dos 5 minutos, o que **não** prometer na banca |
 | `VERIFICACAO.md` | O diário de como a IA foi dirigida, verificada e corrigida (base do relatório individual) |
 
@@ -21,7 +21,7 @@ Precisa de Node 22+ (sem dependências) e dos CSVs do desafio (veja abaixo).
 node conferente/rodar.js 20261103                  # motor → agente → página → histórico (precisa de conferente/.env com AI_PROXY_API_KEY)
 node conferente/rodar.js --continuar 20261111      # acrescenta mais dias à rodada anterior, sem refazer o que já foi verificado
 node --test conferente/tests/ pitch/               # testes: sem IA e sem rede
-node pitch/gerar.js                                # regenera o deck (antes: conferente/pagina.js, conferente/duplicidades.js e pitch/capturas.js)
+node pitch/gerar.js                                # regenera o deck (antes: conferente/pagina.js, conferente/duplicidades.js)
 ```
 A tela do tesoureiro fica em `conferente/saida/index.html` (abre no dia mais recente; link direto: `#dia-2026-11-03`). O deck fica em `pitch/pitch.html` (setas navegam, N notas, T cronômetro, F tela cheia).
 
@@ -39,7 +39,7 @@ A base é da organização do evento. Para rodar, extraia o zip `GoHacks_Talent_
 | O quê | Onde | Para quê |
 |---|---|---|
 | **Tela do tesoureiro** | [`conferente/saida/index.html`](conferente/saida/index.html) (baixe e abra no navegador) | Abre em **"Hoje" (13/11)**. Mostra, dia a dia, o que o agente fez e qual é o próximo passo da pessoa. Cada caso tem o passo a passo do agente. |
-| **Deck do pitch (5 min)** | [`pitch/pitch.html`](pitch/pitch.html) | Setas navegam, **N** mostra as notas de fala, **T** liga o cronômetro. Os 3 últimos slides são o plano B. |
+| **Deck do pitch (5 min)** | [`pitch/pitch.html`](pitch/pitch.html) | Setas navegam, **N** mostra as notas de fala, **T** liga o cronômetro. |
 | **Como a IA foi dirigida e verificada** | [`VERIFICACAO.md`](VERIFICACAO.md) | Cada entrega da IA, como foi conferida, onde errou e como foi corrigida. |
 | **Visão de produto: botão "Enviar e-mails"** | Na tela, dentro de cada seção de "Seus próximos passos", liberado depois de "Marcado como lido" (e na aba **Caixa de saída**) | O tesoureiro revisa os dossiês, confirma e "envia" os e-mails para quem deve resolver. **É simulado: nada é enviado de verdade**; mostra o que o produto teria, e as integrações (SMTP, Outlook, Gmail) ficam como evolução. |
 | **Roteiro e premissas** | [`PITCH.md`](PITCH.md) | Esqueleto SOAR, roteiro e o que **não** prometemos (ex.: os R$ 404 mil são "pagos a mais" pela nossa regra; o tempo manual é premissa a validar). |

@@ -54,7 +54,13 @@ Notas para a banca. Cada argumento tem a prova correspondente no `VERIFICACAO.md
 - **R, Resultados:** Em 876 títulos de 9 dias (03/11 a 13/11): 51 casos tratados, R$ 17 mil de duplicidade cancelada, R$ 252 mil retidos antes de sair e 8 contatos escalados; e a base mostra R$ 404 mil já pagos em dobro (R$ 373 mil confirmados no extrato do banco).
 
 ## Elevator pitch (modelo do workshop; usar em 3 momentos: abertura, descrição da submissão, resposta no pré-júri)
-"Para o time de contas a pagar, que assina o lote bancário sem conferir título por título, construí o Conferente de Pagamentos, um agente que confere cada pagamento antes de o dinheiro sair e só chama uma pessoa quando precisa. Com ele, a pessoa só olha as exceções."
+**Principal (cerca de 25 s):** "Para o time de contas a pagar, que assina o lote das 10h sem conferir título por título, e já pagou R$ 404 mil em dobro na base, construí o Conferente de Pagamentos, um agente que confere cada pagamento antes de o dinheiro sair, resolve sozinho o que é simples e chama uma pessoa, com o dossiê pronto, quando passa de R$ 5 mil ou precisa de contato com o fornecedor. Com ele, o tesoureiro só olha as exceções."
+
+**Se não couber numa respiração (15 s, abertura):** "O lote das 10h sai sem ninguém conferir título por título, e na base já saíram R$ 404 mil em dobro. Construí o Conferente de Pagamentos: um agente que confere cada pagamento antes de o dinheiro sair e só chama uma pessoa quando precisa."
+
+**Uma frase (submissão e pré-júri):** "Agente que confere cada título do lote de pagamentos antes de fechar, resolve o simples até R$ 5 mil e entrega às pessoas um dossiê completo do que exige decisão ou contato, com as travas de segurança em código e sem ação sem aprovação humana."
+
+- Não diga que o agente "teria evitado" os R$ 404 mil: ele rodou só de 03/11 a 13/11.
 
 ## Roteiro (slide a slide; as notas de fala estão no deck: tecla N)
 | Minuto | Slide | Conteúdo |
@@ -88,3 +94,42 @@ Depois que o tesoureiro vê tudo e confirma que precisa escalar para pessoas aci
 - Quem recebe: a pessoa que o agente apontou no dossiê, com as outras em cópia; pedidos de aprovação vão para o aprovador do limite (acima de R$ 50 mil, para a diretora). Os endereços vêm só do cadastro de usuários da base.
 - **Antes de ir ao vivo no dia 13/11:** abra a página com `#reiniciar` no fim do endereço (ou use o link discreto "Reiniciar as leituras e os e-mails enviados deste dia" no rodapé do dia) para zerar as leituras e os envios simulados.
 - Na demo é **opcional (10 s)**: só se sobrar tempo dos 5 minutos. Diga "é simulado" antes que alguém pergunte.
+
+## Perguntas da banca: respostas de bolso
+
+### 1. Qual arquitetura? Como a solução foi criada?
+"Regra em código para achar, agente de IA para investigar, pessoa para decidir."
+- **Regras em código** (`engine.js`, `titulos.js`, `politica.js`): varrem o lote e marcam o suspeito (duplicidade com tolerância de 1%, valor fora do padrão, dado diferente do cadastro). Determinístico, sem prompt.
+- **Agente de IA** (`agente.js`): LLM com 11 ferramentas investiga cada caso suspeito, via AI Proxy do evento. O histórico de cada rodada fica gravado.
+- **Trava no código** (`erp.js`): a IA só age até R$ 5 mil; o resto vira dossiê para uma pessoa.
+- **Camada de dados** (`dados.js`): hoje lê CSV; trocar a fonte é trocar este adaptador.
+- **Tela**: uma página HTML única. O ERP é simulado.
+
+### 2. Como a IA chegou nesse resultado? Por que confiar?
+- O agente recebe um título suspeito, consulta os dados com as ferramentas, decide e justifica. Medido: 37 s e 58 s por caso. Semana 03/11 a 11/11: 51 casos, nenhum sem desfecho.
+- **"Não pedimos confiança no agente: as regras de segurança estão no código, não no prompt."** Só cancela com gêmeo mais antigo e vivo; não corrige para ficar igual a outro título; o telefone é sempre o do cadastro; acima de R$ 5 mil só monta dossiê; pessoas sempre aprovam e entram em contato.
+- **Ponto forte:** a nossa verificação pegou erros do próprio agente (cancelou títulos legítimos, "corrigiu" valor para ficar duplicado, deixou R$ 121 mil com aprovação pendente dentro do lote). Cada erro virou trava no código e teste.
+- Números verificados: R$ 404.029,42 pagos em duplicidade em 53 casos; R$ 373.306,09 confirmados no extrato da Meridiano.
+
+### 3. Como seria numa implantação real na Gogroup?
+Seja direto: hoje é protótipo, testado só com a base do desafio.
+1. Trocar o adaptador de CSV por leitura do ERP (títulos, fornecedores, usuários) e do extrato bancário.
+2. Cancelar e corrigir por API no ERP, com perfil de acesso restrito ao que o agente pode fazer (hoje é simulado).
+3. E-mails por SMTP, Outlook ou Gmail com credenciais da empresa (hoje é simulado; o texto já está pronto).
+4. Gatilho automático quando a Agenda Remessa do dia for gerada.
+5. Governança: autenticação, log de auditoria, token em cofre, limite de R$ 5 mil validado com o financeiro.
+6. Fase em sombra: algumas semanas só recomendando, comparando com a decisão do tesoureiro, antes de liberar qualquer ação automática.
+
+### 4. Fluxo real do tesoureiro e no que ajuda
+1. Chega a Agenda Remessa; o agente roda; a página abre no dia mais recente ("Hoje").
+2. A página diz o que o agente já fez e o que sobrou para a pessoa.
+3. Lê cada passo na ordem e marca "Marcado como lido".
+4. Libera o envio, revisa os dossiês e envia os e-mails (simulado). Quem recebe entra em contato com o fornecedor; o tesoureiro não liga.
+5. O dia fica resolvido quando todos os passos estiverem lidos.
+- **Ajuda:** em vez de conferir o lote linha a linha, recebe só o que importa, já investigado, com provas e telefone do cadastro; o que seria pago em duplicidade é segurado antes do fechamento.
+- **Cuidado:** "10 min manual por caso" é premissa NÃO validada. Diga "estimativa a validar com o financeiro; o que medimos foi o tempo do agente".
+
+### Perguntas difíceis
+- **"E se o agente errar?"** Os erros dele estão documentados e bloqueados no código; acima de R$ 5 mil ele não age; nada vai ao ERP sem pessoa.
+- **"Funciona com dados reais?"** Só testamos com a base do desafio; não validado em produção.
+- **"Por que LLM e não só regra?"** Regra acha; investigar cruzando extrato, histórico e cadastro caso a caso e montar o dossiê é o que o agente faz.
