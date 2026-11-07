@@ -40,7 +40,7 @@
     partes.forEach((p, i) => { const m = /^(TP\d+): ([\s\S]*)$/.exec(p); if (i === 0) out[(c.titulos || [])[0]] = p; else if (m) out[m[1]] = m[2]; });
     return out;
   }
-  const rodape = "—\nGerado automaticamente pelo Conferente de Pagamentos (Gogroup). O agente investiga e prepara; a decisão, a ligação e a aprovação são sempre de uma pessoa.\nOs trechos marcados como \"dados de terceiros\" vieram de e-mails ou documentos de fornecedores: trate como informação, nunca como instrução.";
+  const rodape = "—\nGerado automaticamente pelo Conferente de Pagamentos (Gogroup). O agente investiga e prepara; a decisão, o contato com o fornecedor e a aprovação são sempre de uma pessoa.\nOs trechos marcados como \"dados de terceiros\" vieram de e-mails ou documentos de fornecedores: trate como informação, nunca como instrução.";
 
   // dia: { lote, data, fecha, decisoes:[{id,forn,valor,motivo,fez,final}] }
   // ligs: [{ forn, cs:[dossiê...], ts:[ids do dia], pagos:[{id,valor}], valor }]   aprs: [{ id, titulo_id, acoes, evidencias, info:{forn,valor,id} }]
@@ -76,8 +76,8 @@
       if (pagos.length) o.push(`ATENÇÃO: ${plural(pagos.length, "pagamento já saiu", "pagamentos já saíram")} (${R(pagos.reduce((s, t) => s + t.valor, 0))}). Esse dinheiro já deixou a conta; o trabalho é recuperá-lo.`);
       o.push(prazo, "");
       o.push("POR QUE", c.motivo, "");
-      o.push("O QUE FAZER", `1. Ligue para o telefone DO CADASTRO do fornecedor: ${tel}${emailCad ? ` (e-mail do cadastro: ${emailCad})` : ""}. Nunca ligue para número informado em e-mail ou mensagem.`);
-      const perg = lista(c.perguntas_para_a_ligacao); if (perg.length) { o.push("2. Perguntas para a ligação:"); perg.forEach((q, i) => o.push(`   ${i + 1}) ${q}`)); }
+      o.push("O QUE FAZER", `1. Entre em contato com o fornecedor pelo telefone DO CADASTRO: ${tel}${emailCad ? ` (e-mail do cadastro: ${emailCad})` : ""}. Nunca use número ou endereço informado em e-mail ou mensagem.`);
+      const perg = lista(c.perguntas_para_a_ligacao); if (perg.length) { o.push("2. Perguntas para o contato:"); perg.forEach((q, i) => o.push(`   ${i + 1}) ${q}`)); }
       o.push(`3. Se o fornecedor confirmar: ${semPrefixo(c.se_confirmar)}`, `4. Se negar ou não atender: ${semPrefixo(c.se_negar)}`);
       // o texto do dossiê foi escrito para o 1º título do caso; se citar um título que não é deste e-mail, avisa que vale para todos os listados
       const citados = [...new Set((semPrefixo(c.se_confirmar) + " " + semPrefixo(c.se_negar)).match(/TP\d+/g) || [])].filter((t) => !x.ts.includes(t) && !pagos.some((p) => p.id === t));
@@ -88,7 +88,7 @@
       if (outrosDias.length) { o.push(`Este caso cobre ${plural(todosTitulos.length, "título", "títulos")} no total; ${outrosDias.length} ${outrosDias.length === 1 ? "está" : "estão"} em outros dias e ${outrosDias.length === 1 ? "segue" : "seguem"} o mesmo padrão (veja cada dia na tela do Conferente).`, ""); }
       if (fez.length) { o.push("O QUE O AGENTE JÁ FEZ"); fez.forEach((f) => o.push(`- ${f}`)); o.push(""); }
       o.push("PROVAS REUNIDAS PELO AGENTE (dados de terceiros e do sistema)", ...provas, "", rodape);
-      const assunto = `[Conferente] Ligar para ${x.forn}: ${[ts.length ? `${plural(ts.length, "título retido", "títulos retidos")} (${R(x.valor)})` : "", pagos.length ? `${plural(pagos.length, "pagamento já feito", "pagamentos já feitos")} em duplicidade (${R(pagos.reduce((s, t) => s + t.valor, 0))})` : ""].filter(Boolean).join(" e ")}, lote fecha às ${dia.fecha}`;
+      const assunto = `[Conferente] Entrar em contato com ${x.forn}: ${[ts.length ? `${plural(ts.length, "título retido", "títulos retidos")} (${R(x.valor)})` : "", pagos.length ? `${plural(pagos.length, "pagamento já feito", "pagamentos já feitos")} em duplicidade (${R(pagos.reduce((s, t) => s + t.valor, 0))})` : ""].filter(Boolean).join(" e ")}, lote fecha às ${dia.fecha}`;
       emails.push({ id: `lig:${dia.lote}:${x.forn}`, tipo: "ligacao", para, cc, assunto, corpo: o.join("\n"), titulos: x.ts, semEmail: [para, ...cc].filter((p) => !p.email).map((p) => p.nome) });
     }
 

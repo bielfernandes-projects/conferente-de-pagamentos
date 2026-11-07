@@ -19,7 +19,7 @@ function oQueFez(r, id) {
     if (s.ferramenta === "retirar_do_lote" && x.executado) linhas.push("Retirou o título do lote antes do fechamento");
     if (s.ferramenta === "cancelar_titulo" && x.executado) linhas.push("Cancelou o título duplicado");
     if (s.ferramenta === "corrigir_lancamento" && x.executado) linhas.push(`Corrigiu o valor de ${R(x.valor_anterior)} para ${R(x.valor_novo)}`);
-    if (s.ferramenta === "escalar_para_humano" && x.executado) linhas.push(x.agrupado_na_ligacao ? "Juntou este título ao dossiê da ligação que já estava aberta com o fornecedor" : `Montou o dossiê da ligação para ${x.escalado_para}`);
+    if (s.ferramenta === "escalar_para_humano" && x.executado) linhas.push(x.agrupado_na_ligacao ? "Juntou este título ao dossiê de contato que já estava aberto com o fornecedor" : `Montou o dossiê de contato para ${x.escalado_para}`);
     if (x.executado === false && /negad/.test(x.motivo || "")) linhas.push(`Tentou ${s.ferramenta === "cancelar_titulo" ? "cancelar" : "corrigir"}, mas a trava do sistema negou: ${x.motivo.replace(/^(cancelamento|correção) negad[oa]: /, "")}`);
   }
   for (const a of ag.estado.aprovacoes.filter((p) => p.titulo_id === id)) {
@@ -29,7 +29,7 @@ function oQueFez(r, id) {
   return linhas;
 }
 function proximoPasso(final, id) {
-  if (final === "escalado") return "Ligar para o fornecedor (veja o dossiê em “Seus próximos passos”)";
+  if (final === "escalado") return "Entrar em contato com o fornecedor (veja o dossiê em “Seus próximos passos”)";
   if (final === "aprovacao") { const a = ag.estado.aprovacoes.find((p) => p.titulo_id === id); return a ? `Aprovador decide: ${[...new Set((a.acoes || [a.acao]).map((k) => ACAO[k] || k))].join(" e ")}` : "Aprovador decide"; }
   if (final === "cancelado") return null;
   if (final === "corrigido") return null;

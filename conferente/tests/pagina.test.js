@@ -44,8 +44,8 @@ test("dias resolvidos: nenhum começa resolvido sem ninguém marcar; todos ficam
   assert.match(h, new RegExp(`${dias.length} de ${dias.length} dias resolvidos`));
   assert.strictEqual((h.match(/class="dia res"/g) || []).length, dias.length);
   assert.match(h, /Dia resolvido/);
-  assert.match(renderiza(null, false), /Marcar o dia inteiro como resolvido/);
-  assert.match(h, /Reabrir o dia/);
+  assert.doesNotMatch(renderiza(null, false), /Marcar o dia inteiro|Reabrir o dia/);   // o botão do dia inteiro foi removido: só cada passo, um a um
+  assert.doesNotMatch(h, /Marcar o dia inteiro|Reabrir o dia/);
 });
 
 test("lotes do dia em ordem cronológica: Meridiano 10:00 antes de Litoral 14:00", { skip: !html }, () => {
@@ -97,13 +97,8 @@ test("o período mostrado vem dos dados: dias, primeiro e último dia", { skip: 
 
 // ---------- botão "Enviar e-mails" (SIMULADO) ----------
 const lote0 = () => "dia-" + dias[dias.length - 1];
-const guardadoComEnvio = (k) => (k.startsWith("caixa:") ? JSON.stringify({ quando: Date.now(), ids: [`lig:${k.slice(6)}:Embalarte`] }) : null);
-
-test('o botão "Enviar e-mails (N)" aparece no dia com pendências, com N maior que zero', { skip: !html }, () => {
-  const h = renderiza(null);
-  const n = /✉ Enviar e-mails \((\d+)\)/.exec(h);
-  assert.ok(n && Number(n[1]) >= 1, "faltou o botão de envio");
-});
+// o navegador guarda um registro por dia E por seção: "caixa:dia-AAAA-MM-DD:ligacao" (contato) e ":aprovacao"
+const guardadoComEnvio = (k) => { const m = /^caixa:(dia-[\d-]+):ligacao$/.exec(k); return m ? JSON.stringify({ quando: Date.now(), ids: [`lig:${m[1]}:Embalarte`] }) : null; };
 
 test("a tela de revisão avisa que é simulação, exige confirmação e começa com o envio travado", { skip: !html }, () => {
   assert.match(src, /nenhum e-mail é enviado de verdade/);
@@ -117,17 +112,11 @@ test("a página não faz NENHUMA chamada de rede (nem para enviar e-mail): sem f
   assert.doesNotMatch(codigo, /fetch\(|XMLHttpRequest|sendBeacon|WebSocket|location\.href\s*=\s*["'`]mailto/);
 });
 
-test("depois de enviar (simulado), o dia mostra o aviso com a hora e o botão some", { skip: !html }, () => {
-  const h = renderizaCom(lote0(), guardadoComEnvio);
-  assert.match(h, /enviado \(simulado\) às \d\d:\d\d|enviados\? \(simulado\)|e-mails? enviados? \(simulado\)/);
-  assert.doesNotMatch(h, /id="enviar"/);
-});
-
 test("Caixa de saída: vazia explica como usar; com envio mostra Para, assunto, o dossiê e o download do rascunho .eml", { skip: !html }, () => {
   assert.match(renderiza("__caixa"), /Nenhum e-mail enviado ainda/);
   const h = renderizaCom("__caixa", guardadoComEnvio);
   assert.match(h, /Baixar rascunho \(\.eml\)/);
-  assert.match(h, /\[Conferente\] Ligar para Embalarte/);
+  assert.match(h, /\[Conferente\] Entrar em contato com Embalarte/);
   assert.match(h, /livia\.campos@gogroup\.com\.br|renata\.paiva@gogroup\.com\.br/);
   assert.doesNotMatch(h, /undefined|NaN|\[object/);
 });
@@ -139,4 +128,116 @@ test("todo dossiê aponta uma pessoa com e-mail no cadastro (ninguém fica sem d
 test("texto de fornecedor vira texto, nunca HTML: o conteúdo do e-mail é escapado na tela", { skip: !html }, () => {
   const h = renderiza(lote0());
   assert.doesNotMatch(h, /<script[^>]*>[^<]*alert|<img[^>]+onerror/i);
+});
+
+// ---------- vocabulário: quem entra em contato é quem recebe o e-mail, não o tesoureiro; passos são "lidos" ----------
+test('o passo diz "Entrar em contato com ..." e a tela não usa mais "Ligar para", "Quem liga" nem "Ligações para pessoas"', { skip: !html }, () => {
+  const h = renderiza(null);
+  assert.match(h, /Entrar em contato com /);
+  assert.match(h, /Quem entra em contato:/);
+  assert.match(h, /Perguntas para o contato/);
+  assert.doesNotMatch(h, /Ligar para|Quem liga|Perguntas para a ligação|Ligações para pessoas|esperando a sua ligação/);
+  for (const dia of dias) assert.doesNotMatch(renderiza("dia-" + dia), /Ligar para|Quem liga/, dia);
+});
+
+test('cada passo tem a caixa "Marcado como lido" (e não "Marcar como feito"); o botão do dia inteiro não existe', { skip: !html }, () => {
+  const h = renderiza(null);
+  const passos = (h.match(/class="card passo/g) || []).length;
+  assert.ok(passos >= 2);
+  assert.strictEqual((h.match(/Marcado como lido<\/label>/g) || []).length, passos);
+  assert.doesNotMatch(h, /Marcar como feito|id="todos"|Marcar o dia inteiro/);
+  assert.match(h, /passos? lidos?|passo lido/);                          // a barra de progresso fala em "lidos"
+  assert.match(h, /marcados como lidos/);                                // e a legenda também
+});
+
+
+// ---------- o botão de envio mora DENTRO de cada seção e só libera depois de "Marcado como lido" ----------
+// Cada passo é um <div class="card passo" id="passo-X">; devolve o HTML da seção X (até o próximo passo).
+const secao = (h, k) => { const i = h.indexOf(`id="passo-${k}"`); if (i < 0) return null; const j = h.indexOf('class="card passo', i + 10); return h.slice(i, j < 0 ? undefined : j); };
+// lê o número do rótulo "✉ Enviar e-mails (N)" do botão da seção, sem expressão regular
+const botaoN = (sec, tipo) => {
+  const s = sec || "", i = s.indexOf(`id="enviar-${tipo}"`); if (i < 0) return null;
+  const marca = "✉ Enviar e-mails (", j = s.indexOf(marca, i); if (j < 0) return null;
+  return Number(s.slice(j + marca.length, s.indexOf(")", j)));
+};
+// roda o script da página e devolve os e-mails que ela monta para o dia (tipo e id)
+function emailsNaPagina(idDia) {
+  const code = preparar(src.replace(/\{ const h = decodeURIComponent.*\r?\n/, "").replace(/render\(\);\s*$/, ""));
+  return new Function("document", "localStorage", "location", "window", code + `;return emailsDoDia(DIAS.find((d) => d.lote === "${idDia}")).map((m) => ({ tipo: m.tipo, id: m.id }));`)(doc0(), { getItem: () => null, setItem() {} }, { hash: "" }, win);
+}
+
+test('o botão de envio fica DENTRO da seção "Entrar em contato", depois de "Marcado como lido", e não solto no topo da página', { skip: !html }, () => {
+  for (const d of dias) {
+    const h = renderiza("dia-" + d);
+    const antes = h.slice(0, h.indexOf('id="passo-'));                       // hero, resumo, legenda e o título "Seus próximos passos"
+    assert.doesNotMatch(antes, /Enviar e-mails/, d);
+    const s = secao(h, "ligar");
+    if (s) assert.match(s, /Marcado como lido<\/label>[^]*✉ Enviar e-mails \(\d+\)/, d);
+  }
+});
+
+test("o envio só é liberado depois de marcar o passo como lido: travado e com aviso antes, liberado depois", { skip: !html }, () => {
+  const antes = secao(renderiza(null, false), "ligar"), depois = secao(renderiza(null, true), "ligar");
+  assert.match(antes, /id="enviar-ligacao" disabled/);
+  assert.match(antes, /Marque como lido para liberar o envio/);
+  assert.match(depois, /id="enviar-ligacao"/);
+  assert.doesNotMatch(depois, /id="enviar-ligacao" disabled|Marque como lido para liberar/);
+});
+
+test("cada seção tem o seu botão, só com os e-mails do seu tipo; a seção de assinatura não envia nada", { skip: !html }, () => {
+  let comAprovacao = 0;
+  for (const d of dias) {
+    const lote = "dia-" + d, h = renderiza(lote, true), esperados = emailsNaPagina(lote);
+    const nLig = esperados.filter((m) => m.tipo === "ligacao").length, nApr = esperados.filter((m) => m.tipo === "aprovacao").length;
+    assert.strictEqual(botaoN(secao(h, "ligar"), "ligacao"), nLig || null, d + " (contato)");
+    assert.doesNotMatch(secao(h, "ligar") || "", /enviar-aprovacao/, d);
+    if (nApr) { comAprovacao++; assert.strictEqual(botaoN(secao(h, "aprovar"), "aprovacao"), nApr, d + " (aprovação)"); }
+    assert.doesNotMatch(secao(h, "assinar") || "", /Enviar e-mails/, d);
+  }
+  assert.ok(comAprovacao > 0, "nenhum dia da base tem pedido de aprovação: o teste não provou nada");
+});
+
+test("depois de enviar (simulado), SÓ a seção que enviou mostra o aviso com a hora e perde o botão; a outra segue com o dela", { skip: !html }, () => {
+  const comAmbas = dias.find((d) => { const e = emailsNaPagina("dia-" + d); return e.some((m) => m.tipo === "ligacao") && e.some((m) => m.tipo === "aprovacao"); });
+  assert.ok(comAmbas, "preciso de um dia com contato E aprovação");
+  const h = renderizaCom("dia-" + comAmbas, guardadoComEnvio), lig = secao(h, "ligar"), apr = secao(h, "aprovar");
+  assert.match(lig, /enviados? \(simulado\) às \d\d:\d\d/);
+  assert.doesNotMatch(lig, /id="enviar-ligacao"/);
+  assert.match(apr, /id="enviar-aprovacao"/);
+  assert.doesNotMatch(apr, /enviados? \(simulado\)/);
+});
+
+// ---------- reinício do dia (para ensaiar e abrir limpo na apresentação) ----------
+// roda o script da página com um armazenamento de verdade (Map) e um endereço (#hash) e devolve o que sobrou guardado
+function comArmazenamento(hash, inicial) {
+  const store = new Map(Object.entries(inicial));
+  const ls = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+  const code = preparar(src.replace(/\{ const h = decodeURIComponent.*\r?\n/, "").replace(/render\(\);\s*$/, ""));
+  const atual = new Function("document", "localStorage", "location", "window", code + ";return atual;")(doc0(), ls, { hash, pathname: "/index.html", search: "" }, win);
+  return { store, atual };
+}
+const diaHoje = () => "dia-" + dias[dias.length - 1], diaAnterior = () => "dia-" + dias[dias.length - 2];
+const estadoCheio = () => ({ [`ok:${diaHoje()}:ligar`]: "1", [`ok:${diaHoje()}:assinar`]: "1", [`caixa:${diaHoje()}:ligacao`]: "{}", [`caixa:${diaHoje()}`]: "{}", [`ok:${diaAnterior()}:ligar`]: "1", [`caixa:${diaAnterior()}:ligacao`]: "{}" });
+
+test("#reiniciar apaga as leituras e os e-mails enviados do dia mais recente (Hoje) e NADA dos outros dias", { skip: !html }, () => {
+  const { store, atual } = comArmazenamento("#reiniciar", estadoCheio());
+  assert.deepStrictEqual([...store.keys()].filter((k) => k.includes(diaHoje())), [], "sobrou estado de hoje");
+  assert.ok(store.has(`ok:${diaAnterior()}:ligar`) && store.has(`caixa:${diaAnterior()}:ligacao`), "apagou o dia anterior");
+  assert.strictEqual(atual, diaHoje());
+});
+
+test("sem o #reiniciar, abrir a página não apaga nada", { skip: !html }, () => {
+  const inicial = estadoCheio(), { store } = comArmazenamento("", inicial);
+  assert.strictEqual(store.size, Object.keys(inicial).length);
+  assert.strictEqual(comArmazenamento("#dia-2026-11-03", inicial).store.size, Object.keys(inicial).length);
+});
+
+test("cada dia tem o link discreto para reiniciar a demonstração (e ele reinicia aquele dia)", { skip: !html }, () => {
+  for (const d of dias) assert.match(renderiza("dia-" + d), /id="reiniciar"[^>]*>Reiniciar as leituras e os e-mails enviados deste dia/, d);
+  assert.match(src, /reiniciar\.onclick = \(\) => \{ reiniciarDia\(l\.lote\)/);
+});
+
+test("passo lido: o botão de envio liberado NÃO fica esmaecido (só o conteúdo lido esmaece)", { skip: !html }, () => {
+  assert.doesNotMatch(html, /\.passo\.feito\{opacity:\.62\}/);                                  // o cartão inteiro não esmaece mais
+  assert.match(html, /\.passo\.feito > div:last-child > :not\(label\.ok\):not\(\.envio\)\{opacity:\.62\}/);
 });

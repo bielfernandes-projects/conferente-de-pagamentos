@@ -1,6 +1,6 @@
 # Conferente de Pagamentos
 
-Projeto do **GoHacks Talent 2026 (Gogroup), desafio 2: Pagamentos.** Um agente de IA que confere o lote bancário **antes** de o dinheiro sair: um motor de regras (código) acha o que está suspeito, e o agente investiga com ferramentas, age dentro do limite do analista (R$ 5 mil) e escala para uma pessoa, com dossiê pronto, o que a política exige. Quem aprova e quem liga é sempre uma pessoa.
+Projeto do **GoHacks Talent 2026 (Gogroup), desafio 2: Pagamentos.** Um agente de IA que confere o lote bancário **antes** de o dinheiro sair: um motor de regras (código) acha o que está suspeito, e o agente investiga com ferramentas, age dentro do limite do analista (R$ 5 mil) e escala para uma pessoa, com dossiê pronto, o que a política exige. Quem aprova e quem entra em contato com o fornecedor é sempre uma pessoa.
 
 > Dados sintéticos. O ERP é **simulado** (as ações vão para um estado em arquivo, não para um sistema real).
 
@@ -41,7 +41,7 @@ A base é da organização do evento. Para rodar, extraia o zip `GoHacks_Talent_
 | **Tela do tesoureiro** | [`conferente/saida/index.html`](conferente/saida/index.html) (baixe e abra no navegador) | Abre em **"Hoje" (13/11)**. Mostra, dia a dia, o que o agente fez e qual é o próximo passo da pessoa. Cada caso tem o passo a passo do agente. |
 | **Deck do pitch (5 min)** | [`pitch/pitch.html`](pitch/pitch.html) | Setas navegam, **N** mostra as notas de fala, **T** liga o cronômetro. Os 3 últimos slides são o plano B. |
 | **Como a IA foi dirigida e verificada** | [`VERIFICACAO.md`](VERIFICACAO.md) | Cada entrega da IA, como foi conferida, onde errou e como foi corrigida. |
-| **Visão de produto: botão "Enviar e-mails"** | Na tela, em "Seus próximos passos" (e na aba **Caixa de saída**) | O tesoureiro revisa os dossiês, confirma e "envia" os e-mails para quem deve resolver. **É simulado: nada é enviado de verdade**; mostra o que o produto teria, e as integrações (SMTP, Outlook, Gmail) ficam como evolução. |
+| **Visão de produto: botão "Enviar e-mails"** | Na tela, dentro de cada seção de "Seus próximos passos", liberado depois de "Marcado como lido" (e na aba **Caixa de saída**) | O tesoureiro revisa os dossiês, confirma e "envia" os e-mails para quem deve resolver. **É simulado: nada é enviado de verdade**; mostra o que o produto teria, e as integrações (SMTP, Outlook, Gmail) ficam como evolução. |
 | **Roteiro e premissas** | [`PITCH.md`](PITCH.md) | Esqueleto SOAR, roteiro e o que **não** prometemos (ex.: os R$ 404 mil são "pagos a mais" pela nossa regra; o tempo manual é premissa a validar). |
 
 **Testes** (`node --test conferente/tests/ pitch/`): os de regras, duplicidades, tela e deck rodam sem nada; os que usam títulos reais do desafio precisam da base em `base-de-dados/` (veja acima). O agente de IA só roda com o token do AI Proxy; a tela e o deck já trazem o resultado de uma rodada completa (03/11 a 13/11).

@@ -49,7 +49,9 @@ h2.sec{font-weight:800;font-size:22px;color:var(--az);margin:38px 0 4px}
 .card{background:var(--card);border-radius:var(--r);padding:22px 24px;margin-bottom:12px;border:1px solid var(--bd)}
 .passo{display:grid;grid-template-columns:auto minmax(0,1fr);gap:16px;scroll-margin-top:16px}
 .num{width:42px;height:42px;border-radius:50%;background:var(--az);color:#fff;font-weight:800;font-size:18px;display:flex;align-items:center;justify-content:center}
-.passo.feito{opacity:.62}.passo.feito .num{background:var(--ci);color:var(--esc)}
+.passo.feito .num{background:var(--ci);color:var(--esc)}
+/* passo lido: só o conteúdo esmaece; a caixa "Marcado como lido" e o botão de envio ficam com força total (o botão acabou de ser liberado) */
+.passo.feito > div:last-child > :not(label.ok):not(.envio){opacity:.62}
 .passo h3{font-weight:700;font-size:18px;line-height:1.3}
 .chip{display:inline-block;font-weight:600;font-size:11.5px;padding:3px 10px;border-radius:999px;margin:0 4px 4px 0}
 .c-ci{background:var(--ci);color:var(--esc)}.c-am{background:var(--am);color:var(--esc)}.c-vm{background:var(--vm);color:#fff}.c-az{background:var(--az);color:#fff}.c-cz{background:#e9ecf1;color:#445}
@@ -73,6 +75,7 @@ footer{margin:34px 0 40px;font-size:12px;color:var(--mut);max-width:90ch}
 .overlay{position:fixed;inset:0;background:rgba(15,39,71,.62);z-index:100;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px;overflow:auto}
 .modal{background:#fff;border-radius:28px;max-width:880px;width:100%;padding:28px;margin:auto}
 .email{background:var(--bg);border-radius:18px;padding:12px 16px;margin:8px 0;font-size:13.5px}
+.envio{margin-top:14px;padding-top:14px;border-top:1px dashed var(--bd)}
 /* celular: nada pode empurrar a largura da página */
 .hero>*,.passo>*,.stats>*{min-width:0}
 .card,.bloco,.stat,.pre,.kv,.caixa,.linha>*{overflow-wrap:anywhere}
@@ -85,7 +88,7 @@ footer{margin:34px 0 40px;font-size:12px;color:var(--mut);max-width:90ch}
   <span class="pill">Conferente de Pagamentos</span>
 </div></header>
 <main class="wrap" id="app"></main>
-<footer class="wrap">Dados sintéticos do GoHacks Talent 2026. O ERP é simulado. O agente só age dentro do limite de aprovação do analista (R$ 5 mil); ligações, aprovações e a assinatura dos lotes são sempre de uma pessoa. Valores do placar são estimativas a partir das ações do agente, sem gabarito oficial.</footer>
+<footer class="wrap">Dados sintéticos do GoHacks Talent 2026. O ERP é simulado. O agente só age dentro do limite de aprovação do analista (R$ 5 mil); os contatos com fornecedores, as aprovações e a assinatura dos lotes são sempre de uma pessoa. Valores do placar são estimativas a partir das ações do agente, sem gabarito oficial.</footer>
 <script>
 const D = __DATA__;
 __EMAILS_JS__
@@ -109,6 +112,10 @@ const diaSemana = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("pt-BR
 // Abre SEMPRE no dia mais recente. Link direto (#dia-2026-11-03 ou #RM20261103-MER) ainda funciona.
 let atual = DIAS[0].lote;
 { const h = decodeURIComponent(location.hash.slice(1)); const alvo = DIAS.find((d) => d.lote === h || d.lotes.some((l) => l.lote === h)); if (alvo) atual = alvo.lote; else if (h === "__hist") atual = h; }
+// Reinício de um dia: apaga as leituras ("Marcado como lido") e os e-mails "enviados" (simulado) guardados neste navegador. Serve para ensaiar e para abrir limpo na apresentação.
+const reiniciarDia = (lote) => { try { ["ligar", "aprovar", "assinar"].forEach((k) => localStorage.removeItem("ok:" + lote + ":" + k)); ["", ":ligacao", ":aprovacao"].forEach((s) => localStorage.removeItem("caixa:" + lote + s)); } catch (e) {} };
+// Endereço com #reiniciar: reinicia o dia mais recente ("Hoje") e tira o comando do endereço, para um recarregamento não reiniciar de novo.
+if (location.hash === "#reiniciar") { reiniciarDia(DIAS[0].lote); atual = DIAS[0].lote; if (typeof history !== "undefined" && history.replaceState) history.replaceState(null, "", location.pathname + location.search); }
 
 // Ligação aparece no dia se tem título dele OU foi aberta num caso dele (ex.: duplicidade já paga, que não está em nenhum lote).
 function ligacoesDoLote(l) {
@@ -130,8 +137,8 @@ function analise(l) {
   assin.forEach((d) => (porAprov[d.assinatura] = porAprov[d.assinatura] || []).push(d));
   const seguem = ds.filter((d) => !["cancelado", "escalado", "aprovacao"].includes(d.final)).length;   // cancelado, retido e à espera de aprovação saem do lote
   const passos = [];
-  if (ligs.length) passos.push({ k: "ligar", titulo: ligs.length === 1 ? `Ligar para ${ligs[0].forn}` : `Ligar para ${ligs.length} fornecedores: ${ligs.map((x) => x.forn).join(", ")}`,
-    sub: [ligs.reduce((s, x) => s + x.ts.length, 0) ? `${plural(ligs.reduce((s, x) => s + x.ts.length, 0), "título está", "títulos estão")} fora do lote esperando a sua ligação.` : "", ligs.some((x) => x.pagos.length) ? `${plural(ligs.reduce((s, x) => s + x.pagos.length, 0), "pagamento já saiu em duplicidade", "pagamentos já saíram em duplicidade")}: o trabalho é recuperar o dinheiro.` : ""].filter(Boolean).join(" ") });
+  if (ligs.length) passos.push({ k: "ligar", titulo: ligs.length === 1 ? `Entrar em contato com ${ligs[0].forn}` : `Entrar em contato com ${ligs.length} fornecedores: ${ligs.map((x) => x.forn).join(", ")}`,
+    sub: [ligs.reduce((s, x) => s + x.ts.length, 0) ? `${plural(ligs.reduce((s, x) => s + x.ts.length, 0), "título está", "títulos estão")} fora do lote esperando o contato com o fornecedor.` : "", ligs.some((x) => x.pagos.length) ? `${plural(ligs.reduce((s, x) => s + x.pagos.length, 0), "pagamento já saiu em duplicidade", "pagamentos já saíram em duplicidade")}: o trabalho é recuperar o dinheiro.` : ""].filter(Boolean).join(" ") });
   if (aprs.length) passos.push({ k: "aprovar", titulo: `Decidir ${plural(aprs.length, "pedido do agente", "pedidos do agente")}`, sub: "Cancelamentos e correções acima do limite do analista (R$ 5 mil). O agente não aprova nada sozinho." });
   passos.push({ k: "assinar", titulo: l.lotes.length > 1 ? `Assinar os ${l.lotes.length} lotes (${l.lotes.map((x) => x.banco.replace("Banco ", "") + " " + x.fecha).join(" e ")})` : "Assinar o lote",
     sub: seguem ? `Os ${seguem} títulos que seguem nos lotes foram conferidos.${assin.length ? ` ${assin.length} precisam da assinatura de rotina do aprovador.` : ""}` : "Nenhum título segue neste dia." });
@@ -148,7 +155,7 @@ function navegacao() {
   return `<div class="dias" role="tablist" aria-label="Dias">${an.map(([d, a]) => `<button class="dia ${a.estado}" role="tab" aria-selected="${d.lote === atual}" data-l="${d.lote}">${d === DIAS[0] ? '<span class="hoje">Hoje</span>' : ""}<b>${fmtD(d.data).slice(0, 5)}</b><small>${esc(diaSemana(d.data))} · ${d.decisoes.length} títulos</small><span class="e">${rotulo(a)}</span></button>`).join("")}
     <button class="dia" role="tab" aria-selected="${atual === "__hist"}" data-l="__hist"><b>Histórico</b><small>execuções do agente</small></button>
     <button class="dia" role="tab" aria-selected="${atual === "__caixa"}" data-l="__caixa"><b>Caixa de saída</b><small>${caixaTotal()} e-mail(s), simulado</small></button></div>
-    <p class="legenda"><b>${res} de ${DIAS.length} dias resolvidos.</b> Um dia fica resolvido quando todos os passos dele estão marcados como feitos. <b>Hoje é ${fmtD(DIAS[0].data).slice(0, 5)}</b>, o dia mais recente da base: a página abre sempre nele.</p>`;
+    <p class="legenda"><b>${res} de ${DIAS.length} dias resolvidos.</b> Um dia fica resolvido quando todos os passos dele estão marcados como lidos. <b>Hoje é ${fmtD(DIAS[0].data).slice(0, 5)}</b>, o dia mais recente da base: a página abre sempre nele.</p>`;
 }
 const ligarNav = () => document.querySelectorAll(".dia").forEach((b) => b.onclick = () => { atual = b.dataset.l; render(); window.scrollTo(0, 0); });
 
@@ -157,7 +164,7 @@ const traceHtml = (d) => d.trace.length ? `<details><summary>Ver o passo a passo
   return `<div class="step"><b>${esc(FERR[s.f] || s.f)}</b>${res ? ` · ${esc(res)}` : ""}<small>${esc(s.f)} ${esc(JSON.stringify(s.a)).slice(0, 180)}</small></div>`; }).join("")}</details>` : "";
 
 function casoHtml(d) {
-  const chip = { cancelado: ["c-az", "Cancelado"], corrigido: ["c-ci", "Corrigido"], agente: ["c-ci", "Resolvido"], escalado: ["c-vm", "Fora do lote · ligação"], aprovacao: ["c-am", "Fora do lote · aprovação"] }[d.final];
+  const chip = { cancelado: ["c-az", "Cancelado"], corrigido: ["c-ci", "Corrigido"], agente: ["c-ci", "Resolvido"], escalado: ["c-vm", "Fora do lote · contato"], aprovacao: ["c-am", "Fora do lote · aprovação"] }[d.final];
   const nada = ["cancelado", "corrigido", "agente"].includes(d.final);
   return `<div class="linha"><div><div class="id">${esc(d.id)}</div><div>${esc(d.forn)}</div><div class="m">${R(d.valor)}${d.valor_corrigido != null ? ` → ${R(d.valor_corrigido)}` : ""}</div></div>
     <div><span class="chip ${chip[0]}">${chip[1]}</span><div class="m">Por que o sistema suspeitou: ${esc(d.motivo)}</div>
@@ -168,21 +175,25 @@ function casoHtml(d) {
 
 // ---------- E-mails de escalonamento (SIMULADO: nada é enviado de verdade) ----------
 // O texto vem de Emails.montar (emails.js, o mesmo módulo dos testes). "Enviar" só registra na Caixa de saída; em produção entraria um adaptador (SMTP, Outlook, Gmail).
-const caixaLer = (lote) => { try { const v = JSON.parse(guarda("caixa:" + lote) || "null"); return v && typeof v === "object" && Array.isArray(v.ids) ? v : null; } catch (e) { return null; } };
-const caixaGravar = (lote, ids) => { try { localStorage.setItem("caixa:" + lote, JSON.stringify({ quando: Date.now(), ids })); } catch (e) {} };
-const caixaTotal = () => DIAS.reduce((s, d) => s + (caixaLer(d.lote) ? caixaLer(d.lote).ids.length : 0), 0);
+// Um registro por dia E por seção (contato / aprovação): cada seção envia os seus e-mails depois de ser lida.
+const caixaLer = (lote, tipo) => { try { const v = JSON.parse(guarda("caixa:" + lote + (tipo ? ":" + tipo : "")) || "null"); return v && typeof v === "object" && Array.isArray(v.ids) ? v : null; } catch (e) { return null; } };
+const caixaGravar = (lote, tipo, ids) => { try { localStorage.setItem("caixa:" + lote + ":" + tipo, JSON.stringify({ quando: Date.now(), ids })); } catch (e) {} };
+// tudo que o dia já enviou (as duas seções + o registro da versão anterior, que não separava por seção)
+const caixaDia = (lote) => { const rs = [caixaLer(lote), caixaLer(lote, "ligacao"), caixaLer(lote, "aprovacao")].filter(Boolean); return rs.length ? { quando: Math.max(...rs.map((r) => r.quando || 0)), ids: [...new Set(rs.flatMap((r) => r.ids))] } : null; };
+const caixaTotal = () => DIAS.reduce((s, d) => s + (caixaDia(d.lote) ? caixaDia(d.lote).ids.length : 0), 0);
 const hora = (ms) => new Date(ms).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const emailsDoDia = (l) => Emails.montar({ dia: l, ligs: ligacoesDoLote(l), aprs: pedidosDoLote(l), pessoas: D.pessoas });
 const pessoaTxt = (p) => `${esc(p.nome)} ${p.email ? "&lt;" + esc(p.email) + "&gt;" : '<b style="color:var(--vm)">(sem e-mail no cadastro)</b>'}`;
 const emailHtml = (m) => `<div class="email"><div><b>Para:</b> ${pessoaTxt(m.para)}${m.cc.length ? `<br><b>Cc:</b> ${m.cc.map(pessoaTxt).join(", ")}` : ""}</div>
   <div style="font-weight:700;margin:6px 0">${esc(m.assunto)}</div><details><summary>Ver o e-mail completo</summary><div class="pre">${esc(m.corpo)}</div></details></div>`;
-function controleEnvio(l, emails) {
-  if (!emails.length) return "";
-  const cx = caixaLer(l.lote);
-  if (cx) return `<span class="chip c-ci" style="margin-left:10px">✓ ${plural(cx.ids.length, "e-mail enviado", "e-mails enviados")} (simulado) às ${hora(cx.quando)}. Veja na Caixa de saída.</span>`;
-  return `<button class="btn" id="enviar" style="margin:0 0 14px 10px;background:var(--vm)">✉ Enviar e-mails (${emails.length})</button>`;
+// Botão de envio DENTRO da seção, logo depois de "Marcado como lido": só libera depois de marcar o passo como lido.
+function envioDaSecao(l, p, lista, tipo) {
+  if (!lista.length) return "";
+  const cx = caixaLer(l.lote, tipo);
+  if (cx) return `<div class="envio"><span class="chip c-ci">✓ ${plural(cx.ids.length, "e-mail enviado", "e-mails enviados")} (simulado) às ${hora(cx.quando)}. Veja na Caixa de saída.</span></div>`;
+  return `<div class="envio"><button class="btn" id="enviar-${tipo}" ${p.feito ? "" : "disabled"} style="margin:0;background:var(--vm);${p.feito ? "" : "opacity:.45;cursor:not-allowed"}">✉ Enviar e-mails (${lista.length})</button>${p.feito ? "" : '<span style="margin-left:10px;color:var(--mut);font-size:13px">Marque como lido para liberar o envio.</span>'}</div>`;
 }
-function abrirModal(l, emails) {
+function abrirModal(l, emails, tipo) {
   const pessoasN = new Set(emails.flatMap((m) => [m.para, ...m.cc].map((p) => p.email || p.nome))).size;
   const faltam = [...new Set(emails.flatMap((m) => m.semEmail))];
   const ov = document.createElement("div"); ov.className = "overlay"; ov.id = "modal";
@@ -204,11 +215,11 @@ function abrirModal(l, emails) {
   const chk = ov.querySelector("#confirmo"), ok = ov.querySelector("#enviarAgora");
   chk.onchange = () => { ok.disabled = !chk.checked; ok.style.opacity = chk.checked ? 1 : 0.45; };
   ov.querySelector("#cancelar").onclick = fechar;
-  ok.onclick = () => { caixaGravar(l.lote, emails.map((m) => m.id)); fechar(); render(); window.scrollTo(0, 0); };
+  ok.onclick = () => { const y = window.scrollY; caixaGravar(l.lote, tipo, emails.map((m) => m.id)); fechar(); render(); window.scrollTo(0, y); };   // fica onde estava: o aviso de enviado aparece na própria seção
   chk.focus();
 }
 function caixa() {
-  const enviados = DIAS.map((d) => [d, caixaLer(d.lote)]).filter(([, c]) => c);
+  const enviados = DIAS.map((d) => [d, caixaDia(d.lote)]).filter(([, c]) => c);
   const topo = `<h2 class="sec">Caixa de saída</h2><p class="lede">E-mails que o tesoureiro revisou e enviou. <b>Simulado:</b> nesta demonstração nada sai de verdade; em produção, esta tela seria o registro de auditoria. Cada e-mail pode ser baixado como rascunho (.eml), que abre no Outlook para a pessoa só clicar em enviar.</p>`;
   if (!enviados.length) return topo + `<div class="card">Nenhum e-mail enviado ainda. Em um dia com pendências, use "Enviar e-mails", revise e confirme.</div>`;
   return topo + enviados.map(([d, c]) => `<div class="card"><h3>Dia ${fmtD(d.data).slice(0, 5)} <span class="chip c-ci">enviado (simulado) em ${new Date(c.quando).toLocaleDateString("pt-BR")} às ${hora(c.quando)}</span></h3>`
@@ -233,9 +244,9 @@ function render() {
       <h1>Fecha às ${esc(l.fecha)}</h1><p class="sub">${plural(ds.length, "título", "títulos")} · ${R(soma(ds))} · pagamento em ${fmtD(l.data)}</p>
       <p class="sub" style="margin-top:4px">${l.lotes.map((x) => `${esc(x.banco.replace("Banco ", ""))} ${x.fecha} (${x.decisoes.length})`).join(" · ")}</p>
       <div class="barra" aria-hidden="true"><i style="width:${Math.round(100 * feitos / passos.length)}%"></i></div>
-      <p class="sub"><b>${feitos} de ${passos.length}</b> ${passos.length === 1 ? "passo feito" : "passos feitos"}</p></div>
+      <p class="sub"><b>${feitos} de ${passos.length}</b> ${passos.length === 1 ? "passo lido" : "passos lidos"}</p></div>
     <div class="bloco amarelo prox"><span class="pill">${prox ? "Seu próximo passo" : "Dia resolvido"}</span>
-      ${prox ? `<h2>${esc(prox.titulo)}</h2><p>${esc(prox.sub)}</p><a class="btn" href="#passo-${prox.k}">Ir para o passo ${prox.n}</a>` : `<h2>Tudo feito. Dia resolvido.</h2><p>Todos os passos deste dia estão marcados como concluídos.</p>`}</div></section>`;
+      ${prox ? `<h2>${esc(prox.titulo)}</h2><p>${esc(prox.sub)}</p><a class="btn" href="#passo-${prox.k}">Ir para o passo ${prox.n}</a>` : `<h2>Tudo lido. Dia resolvido.</h2><p>Todos os passos deste dia estão marcados como lidos.</p>`}</div></section>`;
 
   h += `<h2 class="sec">O que o agente fez neste dia</h2>
     <p class="resumo">O agente conferiu <b>${plural(ds.length, "título", "títulos")}</b> um por um, cruzando nota fiscal, pedido de compra, cadastro do fornecedor e banco.
@@ -247,15 +258,16 @@ function render() {
       <div class="stat verm"><b>${retidos.length}</b><span>Retidos para uma pessoa</span><small>saíram do lote para não serem pagos errado (${R(soma(retidos))})</small></div></div>`;
 
   const emails = emailsDoDia(l);
-  h += `<h2 class="sec">Seus próximos passos</h2><p class="lede">Na ordem. Marque cada um quando terminar: a barra lá em cima acompanha, e o dia fica resolvido quando todos estiverem feitos.</p>
-    <button class="btn" id="todos" style="margin:0 0 14px">${feitos === passos.length ? "Reabrir o dia" : "Marcar o dia inteiro como resolvido"}</button>${controleEnvio(l, emails)}`;
+  const TIPO_DO_PASSO = { ligar: "ligacao", aprovar: "aprovacao" };                     // cada seção envia os e-mails do seu tipo
+  const emailsDe = (k) => emails.filter((m) => m.tipo === TIPO_DO_PASSO[k]);
+  h += `<h2 class="sec">Seus próximos passos</h2><p class="lede">Na ordem. Leia cada passo e marque como lido: a barra lá em cima acompanha, o envio dos e-mails de cada seção é liberado depois de lida, e o dia fica resolvido quando todos estiverem lidos.</p>`;
   passos.forEach((p) => {
     let corpo = "";
     if (p.k === "ligar") corpo = ligs.map((x) => { const c = x.cs[0]; return `<div class="card" style="background:var(--bg);border:0;margin:10px 0 0">
         <h3>${esc(x.forn)} ${x.ts.length ? `<span class="chip c-vm">${plural(x.ts.length, "título", "títulos")} fora do lote · ${R(x.valor)}</span>` : ""}${x.pagos.length ? `<span class="chip c-am">${plural(x.pagos.length, "pagamento já feito", "pagamentos já feitos")} · ${R(x.pagos.reduce((s, t) => s + t.valor, 0))}</span>` : ""}</h3>
         <p class="kv"><b>Por quê:</b> ${esc(c.motivo)}</p>
-        <p class="kv"><b>Quem liga:</b> ${esc(c.para)}${c.copia && c.copia.length ? ` (com cópia para ${esc(c.copia.join(", "))})` : ""}<br><b>Telefone do cadastro:</b> ${esc(c.ligar_para)}</p>
-        <div class="caixa" style="background:#fff"><b>Perguntas para a ligação</b><ol class="perg">${lista(c.perguntas_para_a_ligacao).map((q) => `<li>${esc(q)}</li>`).join("")}</ol></div>
+        <p class="kv"><b>Quem entra em contato:</b> ${esc(c.para)}${c.copia && c.copia.length ? ` (com cópia para ${esc(c.copia.join(", "))})` : ""}<br><b>Telefone do cadastro:</b> ${esc(c.ligar_para)}</p>
+        <div class="caixa" style="background:#fff"><b>Perguntas para o contato</b><ol class="perg">${lista(c.perguntas_para_a_ligacao).map((q) => `<li>${esc(q)}</li>`).join("")}</ol></div>
         <div class="caixas"><div class="caixa" style="background:#fff"><b>Se o fornecedor confirmar</b>${esc(c.se_confirmar)}</div><div class="caixa" style="background:#fff"><b>Se negar ou não atender</b>${esc(c.se_negar)}</div></div>
         <p class="m" style="color:var(--mut);font-size:13px">${x.ts.length ? `O agente já retirou do lote: ${x.ts.map(esc).join(", ")}.` : ""}${x.pagos.length ? ` Já pagos: ${x.pagos.map((t) => `${esc(t.id)} (${R(t.valor)})`).join(", ")}. Esse dinheiro já saiu da conta.` : ""}</p>
         <details><summary>Provas reunidas pelo agente</summary><div class="pre">${esc(c.evidencias)}</div></details></div>`; }).join("");
@@ -266,7 +278,7 @@ function render() {
         <details><summary>Provas</summary><div class="pre">${esc(q.evidencias)}</div></details></div>`; }).join("");
     if (p.k === "assinar") corpo = Object.entries(porAprov).map(([quem, arr]) => `<p class="kv"><b>${esc(quem)}:</b> ${plural(arr.length, "título", "títulos")} já conferidos, ${R(soma(arr))}. Um aviso só, em vez de ${arr.length} chamadas.</p>`).join("") || `<p class="kv">Nenhuma assinatura extra além da do lote.</p>`;
     h += `<div class="card passo ${p.feito ? "feito" : ""}" id="passo-${p.k}"><div class="num">${p.n}</div><div><h3>${esc(p.titulo)}</h3><p class="m" style="color:var(--mut)">${esc(p.sub)}</p>${corpo}
-      <label class="ok"><input type="checkbox" data-k="${esc(p.chave)}" ${p.feito ? "checked" : ""}> Marcar como feito</label></div></div>`;
+      <label class="ok"><input type="checkbox" data-k="${esc(p.chave)}" ${p.feito ? "checked" : ""}> Marcado como lido</label>${envioDaSecao(l, p, emailsDe(p.k), TIPO_DO_PASSO[p.k])}</div></div>`;
   });
 
   h += `<h2 class="sec">Caso a caso</h2><p class="lede">Cada título que o agente tocou, o que ele fez e o que sobra para você. Os liberados ficam no fim.</p>`;
@@ -278,22 +290,21 @@ function render() {
   h += `<h2 class="sec">O período inteiro (${fmtD(p.de).slice(0, 5)} a ${fmtD(p.ate).slice(0, 5)}, ${p.dias} dias)</h2><div class="stats">
     <div class="stat azul"><b>${p.titulos}</b><span>Títulos conferidos</span><small>${R(p.valor)}</small></div>
     <div class="stat ciano"><b style="font-size:26px">${R(p.cancelado)}</b><span>Duplicidades canceladas</span><small>não saem em dobro</small></div>
-    <div class="stat amarelo"><b style="font-size:26px">${R(p.em_risco)}</b><span>Fora do lote, em risco</span><small>aguardando ligação; ainda não sabemos se é golpe</small></div>
-    <div class="stat verm"><b>${p.acionamentos}</b><span>Ligações para pessoas</span><small>${R(p.acionamentos * 60)} (R$ 60 cada)</small></div></div>
+    <div class="stat amarelo"><b style="font-size:26px">${R(p.em_risco)}</b><span>Fora do lote, em risco</span><small>aguardando contato com o fornecedor; ainda não sabemos se é golpe</small></div>
+    <div class="stat verm"><b>${p.acionamentos}</b><span>Contatos escalados</span><small>${R(p.acionamentos * 60)} (R$ 60 cada)</small></div></div>
     <p class="lede" style="margin-top:12px">Antes, o tesoureiro assinava o lote sem conferir título por título. Agora, ${p.titulos} títulos conferidos e a pessoa só entra onde a política exige. Agente: ${esc(D.modelo)}, ${D.uso.chamadas} chamadas.</p>`;
+  h += `<p style="margin:30px 0 0;font-size:12.5px;color:var(--mut)">Ensaiando a demonstração? <button id="reiniciar" style="background:none;border:0;padding:0;font:inherit;color:var(--az);text-decoration:underline;cursor:pointer">Reiniciar as leituras e os e-mails enviados deste dia</button></p>`;
   document.getElementById("app").innerHTML = h;
+  const reiniciar = document.getElementById("reiniciar"); if (reiniciar) reiniciar.onclick = () => { reiniciarDia(l.lote); render(); window.scrollTo(0, 0); };
   ligarNav();
-  const enviar = document.getElementById("enviar");
-  if (enviar) enviar.onclick = () => abrirModal(l, emails);
-  const todos = document.getElementById("todos");
-  if (todos) todos.onclick = () => { const tudo = feitos !== passos.length; passos.forEach((p) => guarda(p.chave, tudo)); render(); window.scrollTo(0, 0); };
+  for (const [k, tipo] of Object.entries(TIPO_DO_PASSO)) { const b = document.getElementById("enviar-" + tipo); if (b) b.onclick = () => abrirModal(l, emailsDe(k), tipo); }
   document.querySelectorAll("input[data-k]").forEach((c) => c.onchange = () => { guarda(c.dataset.k, c.checked); const y = window.scrollY; render(); window.scrollTo(0, y); });
 }
 
 function historico() {
   const hs = [...D.historico].reverse();
   const q = (iso) => { const d = new Date(iso); return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
-  return `<h2 class="sec">Histórico de execuções</h2><p class="lede">Cada linha guarda um registro completo (decisões e passo a passo do agente) em <code>saida/historico/</code>, para auditoria.</p>` + (hs.length ? `<div class="card"><table><thead><tr><th>Quando</th><th>Lotes</th><th class="n">Títulos</th><th class="n">Liberados</th><th class="n">Cancelados</th><th class="n">Corrigidos</th><th class="n">Ligações</th><th class="n">Aprovações</th><th>IA</th></tr></thead><tbody>${hs.map((h) => `<tr><td>${esc(q(h.quando))}</td><td>${esc(Array.isArray(h.lotes) ? h.lotes.map((x) => x.slice(6) + "/" + x.slice(4, 6)).join(", ") : h.lotes)}</td><td class="n">${h.titulos}</td><td class="n">${h.liberados}</td><td class="n">${h.cancelados}</td><td class="n">${h.corrigidos}</td><td class="n">${h.ligacoes}</td><td class="n">${h.aprovacoes}</td><td>${esc(h.modelo)} · ${h.chamadas_ia} chamadas · ${(h.tokens_entrada + h.tokens_saida).toLocaleString("pt-BR")} tok${h.casos_sem_resolver ? ` · <b style="color:var(--vm)">${h.casos_sem_resolver} sem resolver</b>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="card">Nenhuma execução registrada ainda.</div>`);
+  return `<h2 class="sec">Histórico de execuções</h2><p class="lede">Cada linha guarda um registro completo (decisões e passo a passo do agente) em <code>saida/historico/</code>, para auditoria.</p>` + (hs.length ? `<div class="card"><table><thead><tr><th>Quando</th><th>Lotes</th><th class="n">Títulos</th><th class="n">Liberados</th><th class="n">Cancelados</th><th class="n">Corrigidos</th><th class="n">Contatos</th><th class="n">Aprovações</th><th>IA</th></tr></thead><tbody>${hs.map((h) => `<tr><td>${esc(q(h.quando))}</td><td>${esc(Array.isArray(h.lotes) ? h.lotes.map((x) => x.slice(6) + "/" + x.slice(4, 6)).join(", ") : h.lotes)}</td><td class="n">${h.titulos}</td><td class="n">${h.liberados}</td><td class="n">${h.cancelados}</td><td class="n">${h.corrigidos}</td><td class="n">${h.ligacoes}</td><td class="n">${h.aprovacoes}</td><td>${esc(h.modelo)} · ${h.chamadas_ia} chamadas · ${(h.tokens_entrada + h.tokens_saida).toLocaleString("pt-BR")} tok${h.casos_sem_resolver ? ` · <b style="color:var(--vm)">${h.casos_sem_resolver} sem resolver</b>` : ""}</td></tr>`).join("")}</tbody></table></div>` : `<div class="card">Nenhuma execução registrada ainda.</div>`);
 }
 render();
 </script>

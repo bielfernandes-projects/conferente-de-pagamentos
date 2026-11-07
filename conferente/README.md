@@ -20,7 +20,7 @@ A tela do tesoureiro é `saida/index.html` (um HTML único, funciona offline). O
 | `titulos.js` | A regra única de "estes dois títulos são o mesmo?" (duplicidade). Motor e ERP usam esta. |
 | `dados.js` | Seam de dados: adapter CSV (padrão) e em memória (`dados.usar({...})`, usado nos testes). |
 | `engine.js` | `classificar(lote)` → libera / segura / bloqueia por título. Também roda por linha de comando. |
-| `erp.js` | ERP simulado, ferramentas do agente e as **travas** (alçada, evidência, gêmeo para cancelar, uma ligação por fornecedor, título escalado sai do lote). `desfecho()` é o veredito final do título. |
+| `erp.js` | ERP simulado, ferramentas do agente e as **travas** (alçada, evidência, gêmeo para cancelar, um contato por fornecedor, título escalado sai do lote). `desfecho()` é o veredito final do título. |
 | `agente.js` | Laço do agente (LLM com chamada de ferramentas). `resolver(..., chat)` aceita um chat falso nos testes. |
 | `comunicacoes.js` · `llm.js` | Sinais objetivos dos e-mails (código) e leitura do texto (IA). A IA só sobe o risco. |
 | `emails.js` | Monta os e-mails de escalonamento com o **dossiê completo** (por quê, telefone do cadastro, perguntas, se confirmar/negar, títulos, provas, prazo) para as pessoas certas. **Puro: não envia nada.** A tela usa o mesmo módulo; o "envio" é simulado (Caixa de saída e rascunho .eml). Em produção entraria um adaptador (SMTP, Outlook, Gmail). |
